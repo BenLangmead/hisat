@@ -70,7 +70,7 @@ class multiseedSearchWorker_hisat {
 public:
 	multiseedSearchWorker_hisat(const multiseedSearchWorker_hisat& W): tid(W.tid) {};
 	multiseedSearchWorker_hisat(int id):tid(id) {};
-	void operator()();
+	void operator()() const;
 };
 
 #endif /* WITH_TBB */
@@ -2890,7 +2890,7 @@ static inline void printEEScoreMsg(
  * -
  */
 #ifdef WITH_TBB
-void multiseedSearchWorker_hisat::operator()() {
+void multiseedSearchWorker_hisat::operator()() const {
 #else
 static void multiseedSearchWorker_hisat(void *vp) {
     int tid = *((int*)vp);

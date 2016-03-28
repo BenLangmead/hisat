@@ -4480,6 +4480,12 @@ extern "C" {
  */
 int bowtie(int argc, const char **argv) {
 	try {
+#ifdef WITH_TBB
+#ifdef WITH_AFFINITY
+		pinning_observer pinner(2 /* hyper threads per core */);
+		pinner.observe(true);
+#endif
+#endif
 		// Reset all global state, including getopt state
 		opterr = optind = 1;
 		resetOptions();
@@ -4595,6 +4601,12 @@ int bowtie(int argc, const char **argv) {
 			}
 			driver<SString<char> >("DNA", bt2index, outfile);
 		}
+#ifdef WITH_TBB
+#ifdef WITH_AFFINITY
+		// Always disable observation before observers destruction
+		pinner.observe(false);
+#endif
+#endif
 		return 0;
 	} catch(std::exception& e) {
 		cerr << "Error: Encountered exception: '" << e.what() << "'" << endl;

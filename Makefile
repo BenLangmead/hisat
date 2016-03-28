@@ -86,6 +86,10 @@ SEARCH_LIBS =
 BUILD_LIBS = 
 INSPECT_LIBS =
 
+ifeq (1,$(NO_SPINLOCK))
+	override EXTRA_FLAGS += -DNO_SPIN_LOCK
+endif
+
 ifeq (1,$(WITH_TBB))
 	LIBS = $(PTHREAD_LIB) -ltbb -ltbbmalloc_proxy
 	EXTRA_FLAGS += -DWITH_TBB 
@@ -107,6 +111,14 @@ ifeq (1,$(USE_SRA))
 	SRA_LIB = -lncbi-ngs-c++-static -lngs-c++-static -lncbi-vdb-static -ldl
 	SEARCH_INC += -I$(NCBI_NGS_DIR)/include -I$(NCBI_VDB_DIR)/include
 	SEARCH_LIBS += -L$(NCBI_NGS_DIR)/lib64 -L$(NCBI_VDB_DIR)/lib64
+endif
+
+ifeq (1,$(WITH_THREAD_PROFILING))
+	override EXTRA_FLAGS += -DPER_THREAD_TIMING=1
+endif
+
+ifeq (1,$(WITH_AFFINITY))
+	override EXTRA_FLAGS += -DWITH_AFFINITY=1
 endif
 
 SHARED_CPPS = ccnt_lut.cpp ref_read.cpp alphabet.cpp shmem.cpp \
