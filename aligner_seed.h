@@ -1624,7 +1624,7 @@ void SeedAligner<index_t>::instantiateSeq(
 	// If fw is false, we take characters starting at the 3' end of the
 	// reverse complement of the read.
 	for(int i = 0; i < len; i++) {
-		seq.set(read.patFw.windowGetDna(i, fw, read.color, depth, len), i);
+		seq.set(read.patFw.windowGetDna(i, fw, depth, len), i);
 		qual.set(read.qual.windowGet(i, fw, depth, len), i);
 	}
 }

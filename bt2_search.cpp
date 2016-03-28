@@ -62,7 +62,6 @@ static EList<string> mates1;  // mated reads (first mate)
 static EList<string> mates2;  // mated reads (second mate)
 static EList<string> mates12; // mated reads (1st/2nd interleaved in 1 file)
 static string adjIdxBase;
-bool gColor;              // colorspace (not supported)
 int gVerbose;             // be talkative
 static bool startVerbose; // be talkative at startup
 int gQuiet;               // print nothing but the alignments
@@ -115,7 +114,6 @@ bool gNorc; // don't align rc orientation of read
 static uint32_t fastaContLen;
 static uint32_t fastaContFreq;
 static bool hadoopOut; // print Hadoop status and summary messages
-static bool fuzzy;
 static bool fullRef;
 static bool samTruncQname; // whether to truncate QNAME to 255 chars
 static bool samOmitSecSeqQual; // omit SEQ/QUAL for 2ndary alignments?
@@ -247,7 +245,6 @@ static void resetOptions() {
 	mates2.clear();
 	mates12.clear();
 	adjIdxBase	            = "";
-	gColor                  = false;
 	gVerbose                = 0;
 	startVerbose			= 0;
 	gQuiet					= false;
@@ -301,7 +298,6 @@ static void resetOptions() {
 	fastaContLen			= 0;
 	fastaContFreq			= 0;
 	hadoopOut				= false; // print Hadoop status and summary messages
-	fuzzy					= false; // reads will have alternate basecalls w/ qualities
 	fullRef					= false; // print entire reference name instead of just up to 1st space
 	samTruncQname           = true;  // whether to truncate QNAME to 255 chars
 	samOmitSecSeqQual       = false; // omit SEQ/QUAL for 2ndary alignments?
@@ -484,7 +480,6 @@ static struct option long_options[] = {
 	{(char*)"shmem",        no_argument,       0,            ARG_SHMEM},
 	{(char*)"mmsweep",      no_argument,       0,            ARG_MMSWEEP},
 	{(char*)"hadoopout",    no_argument,       0,            ARG_HADOOPOUT},
-	{(char*)"fuzzy",        no_argument,       0,            ARG_FUZZY},
 	{(char*)"fullref",      no_argument,       0,            ARG_FULLREF},
 	{(char*)"usage",        no_argument,       0,            ARG_USAGE},
 	{(char*)"sam-no-qname-trunc", no_argument, 0,            ARG_SAM_NO_QNAME_TRUNC},
@@ -995,7 +990,6 @@ static void parseOption(int next_option, const char *arg) {
 			seedCacheCurrentMB = (uint32_t)parseInt(1, "--seed-cache-sz arg must be at least 1", arg);
 			break;
 		case ARG_REFIDX: noRefNames = true; break;
-		case ARG_FUZZY: fuzzy = true; break;
 		case ARG_FULLREF: fullRef = true; break;
 		case ARG_GAP_BAR:
 			gGapBarrier = parseInt(1, "--gbar must be no less than 1", arg);
@@ -2915,7 +2909,6 @@ static void multiseedSearchWorker(void *vp) {
 			// Try to align this read
 			while(retry) {
 				retry = false;
-				assert_eq(ps->bufa().color, false);
 				ca.nextRead(); // clear the cache
 				olm.reads++;
 				assert(!ca.aligning());
@@ -3923,7 +3916,6 @@ static void multiseedSearchWorker_2p5(void *vp) {
 				gettimeofday(&prm.tv_beg, &prm.tz_beg);
 			}
 			// Try to align this read
-			assert_eq(ps->bufa().color, false);
 			olm.reads++;
 			bool pair = paired;
 			const size_t rdlen1 = ps->bufa().length();
@@ -4219,10 +4211,10 @@ static void driver(
 		solexaQuals,   // true -> qualities are on solexa64 scale
 		phred64Quals,  // true -> qualities are on phred64 scale
 		integerQuals,  // true -> qualities are space-separated numbers
-		fuzzy,         // true -> try to parse fuzzy fastq
 		fastaContLen,  // length of sampled reads for FastaContinuous...
 		fastaContFreq, // frequency of sampled reads for FastaContinuous...
-		skipReads      // skip the first 'skip' patterns
+		skipReads,     // skip the first 'skip' patterns
+		nthreads       // # threads
 	);
 	if(gVerbose || startVerbose) {
 		cerr << "Creating PatternSource: "; logTime(cerr, true);

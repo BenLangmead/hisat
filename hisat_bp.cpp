@@ -512,7 +512,6 @@ static struct option long_options[] = {
 	{(char*)"shmem",        no_argument,       0,            ARG_SHMEM},
 	{(char*)"mmsweep",      no_argument,       0,            ARG_MMSWEEP},
 	{(char*)"hadoopout",    no_argument,       0,            ARG_HADOOPOUT},
-	{(char*)"fuzzy",        no_argument,       0,            ARG_FUZZY},
 	{(char*)"fullref",      no_argument,       0,            ARG_FULLREF},
 	{(char*)"usage",        no_argument,       0,            ARG_USAGE},
 	{(char*)"sam-no-qname-trunc", no_argument, 0,            ARG_SAM_NO_QNAME_TRUNC},
@@ -1038,7 +1037,6 @@ static void parseOption(int next_option, const char *arg) {
 			seedCacheCurrentMB = (uint32_t)parseInt(1, "--seed-cache-sz arg must be at least 1", arg);
 			break;
 		case ARG_REFIDX: noRefNames = true; break;
-		case ARG_FUZZY: fuzzy = true; break;
 		case ARG_FULLREF: fullRef = true; break;
 		case ARG_GAP_BAR:
 			gGapBarrier = parseInt(1, "--gbar must be no less than 1", arg);
@@ -3016,7 +3014,6 @@ static void multiseedSearchWorker_hisat_bp(void *vp) {
 			// Try to align this read
 			while(retry) {
 				retry = false;
-				assert_eq(ps->bufa().color, false);
 				ca.nextRead(); // clear the cache
 				olm.reads++;
 				assert(!ca.aligning());
@@ -3284,7 +3281,7 @@ static void multiseedSearchWorker_hisat_bp(void *vp) {
                 if(nthreads > 1 && useTempSpliceSite) {
                     // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
                     assert_gt(tid, 0);
-                    assert_leq(tid, thread_rids.size());
+                    assert_leq(tid, (int)thread_rids.size());
                     assert(thread_rids[tid - 1] == 0 || rdid > thread_rids[tid - 1]);
                     thread_rids[tid - 1] = rdid;
                 }
@@ -3420,10 +3417,10 @@ static void driver(
 		solexaQuals,   // true -> qualities are on solexa64 scale
 		phred64Quals,  // true -> qualities are on phred64 scale
 		integerQuals,  // true -> qualities are space-separated numbers
-		fuzzy,         // true -> try to parse fuzzy fastq
 		fastaContLen,  // length of sampled reads for FastaContinuous...
 		fastaContFreq, // frequency of sampled reads for FastaContinuous...
-		skipReads      // skip the first 'skip' patterns
+		skipReads,     // skip the first 'skip' patterns
+		nthreads       // # threads
 	);
 	if(gVerbose || startVerbose) {
 		cerr << "Creating PatternSource: "; logTime(cerr, true);

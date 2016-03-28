@@ -88,22 +88,7 @@ bool PatternSource::nextReadPair(
 	// nextPatternImpl does the reading from the ultimate source;
 	// it is implemented in concrete subclasses
 	success = done = paired = false;
-	nextReadPairImpl(ra, rb, rdid, endid, success, done, paired);
-	if(success) {
-		// Construct reversed versions of fw and rc seqs/quals
-		ra.finalize();
-		if(!rb.empty()) {
-			rb.finalize();
-		}
-		// Fill in the random-seed field using a combination of
-		// information from the user-specified seed and the read
-		// sequence, qualities, and name
-		ra.seed = genRandSeed(ra.patFw, ra.qual, ra.name, seed_);
-		if(!rb.empty()) {
-			rb.seed = genRandSeed(rb.patFw, rb.qual, rb.name, seed_);
-		}
-	}
-	return success;
+	return nextReadPairImpl(ra, rb, rdid, endid, success, done, paired);
 }
 
 /**
@@ -114,21 +99,10 @@ bool PatternSource::nextRead(
 	TReadId& rdid,
 	TReadId& endid,
 	bool& success,
-	bool& done)
+	bool& done,
+	bool lock)
 {
-	// nextPatternImpl does the reading from the ultimate source;
-	// it is implemented in concrete subclasses
-	nextReadImpl(r, rdid, endid, success, done);
-	if(success) {
-		// Construct the reversed versions of the fw and rc seqs
-		// and quals
-		r.finalize();
-		// Fill in the random-seed field using a combination of
-		// information from the user-specified seed and the read
-		// sequence, qualities, and name
-		r.seed = genRandSeed(r.patFw, r.qual, r.name, seed_);
-	}
-	return success;
+	return nextReadImpl(r, rdid, endid, success, done, lock);
 }
 
 /**
@@ -175,30 +149,34 @@ bool PairedSoloPatternSource::nextReadPair(
 		} while(!success && !done);
 		if(!success) {
 			assert(done);
-			// If patFw is empty, that's our signal that the
-			// input dried up
 			ThreadSafe ts(&mutex_m);
 			if(cur + 1 > cur_) cur_++;
 			cur = cur_;
 			continue; // on to next pair of PatternSources
 		}
 		assert(success);
+		ra.mate = 1;
+		ra.rdid = rdid;
+		ra.endid = endid;
+		(*src_)[cur]->finalize(ra);
 		ra.seed = genRandSeed(ra.patFw, ra.qual, ra.name, seed_);
-		if(!rb.empty()) {
+		ra.constructRevComps();
+		ra.constructReverses();
+		if(fixName) {
+			ra.fixMateName(1);
+		}
+		if(paired) {
+			rb.mate = 2;
+			rb.rdid = rdid;
+			rb.endid = endid+1;
+			(*src_)[cur]->finalize(rb);
 			rb.seed = genRandSeed(rb.patFw, rb.qual, rb.name, seed_);
+			rb.constructRevComps();
+			rb.constructReverses();
 			if(fixName) {
-				ra.fixMateName(1);
 				rb.fixMateName(2);
 			}
 		}
-		ra.rdid = rdid;
-		ra.endid = endid;
-		if(!rb.empty()) {
-			rb.rdid = rdid;
-			rb.endid = endid+1;
-		}
-		ra.mate = 1;
-		rb.mate = 2;
 		return true; // paired
 	}
 	assert_leq(cur, src_->size());
@@ -223,10 +201,6 @@ bool PairedDualPatternSource::nextReadPair(
 {
 	// 'cur' indexes the current pair of PatternSources
 	uint32_t cur = cur_;
-	{
-		ThreadSafe ts(&mutex_m);
-		cur = cur_;
-	}
 	success = false;
 	done = true;
 	while(cur < srca_->size()) {
@@ -243,9 +217,14 @@ bool PairedDualPatternSource::nextReadPair(
 				cur = cur_; // Move on to next PatternSource
 				continue; // on to next pair of PatternSources
 			}
+			assert(success);
 			ra.rdid = rdid;
 			ra.endid = endid;
 			ra.mate  = 0;
+			ra.seed = genRandSeed(ra.patFw, ra.qual, ra.name, seed_);
+			(*srca_)[cur]->finalize(ra);
+			ra.constructRevComps();
+			ra.constructReverses();
 			return success;
 		} else {
 			paired = true;
@@ -259,10 +238,10 @@ bool PairedDualPatternSource::nextReadPair(
 			{
 				ThreadSafe ts(&mutex_m);
 				do {
-					(*srca_)[cur]->nextRead(ra, rdid_a, endid_a, success_a, done_a);
+					(*srca_)[cur]->nextRead(ra, rdid_a, endid_a, success_a, done_a, false);
 				} while(!success_a && !done_a);
 				do {
-					(*srcb_)[cur]->nextRead(rb, rdid_b, endid_b, success_b, done_b);
+					(*srcb_)[cur]->nextRead(rb, rdid_b, endid_b, success_b, done_b, false);
 				} while(!success_b && !done_b);
 				if(!success_a && success_b) {
 					cerr << "Error, fewer reads in file specified with -1 than in file specified with -2" << endl;
@@ -276,25 +255,34 @@ bool PairedDualPatternSource::nextReadPair(
 					cerr << "Error, fewer reads in file specified with -2 than in file specified with -1" << endl;
 					throw 1;
 				}
-			}
-			assert_eq(rdid_a, rdid_b);
-			assert_eq(success_a, success_b);
-			if(fixName) {
-				ra.fixMateName(1);
-				rb.fixMateName(2);
+				assert_eq(rdid_a, rdid_b);
+				assert(success_a && success_b);
 			}
 			rdid = rdid_a;
 			endid = endid_a;
 			success = success_a;
 			done = done_a;
+			
 			ra.rdid = rdid;
 			ra.endid = endid;
-			if(!rb.empty()) {
-				rb.rdid = rdid;
-				rb.endid = endid+1;
-			}
 			ra.mate = 1;
+			(*srca_)[cur]->finalize(ra);
+			ra.seed = genRandSeed(ra.patFw, ra.qual, ra.name, seed_);
+			ra.constructRevComps();
+			ra.constructReverses();
+			if(fixName) {
+				ra.fixMateName(1);
+			}
+			rb.rdid = rdid;
+			rb.endid = endid+1;
 			rb.mate = 2;
+			(*srcb_)[cur]->finalize(rb);
+			rb.seed = genRandSeed(rb.patFw, rb.qual, rb.name, seed_);
+			rb.constructRevComps();
+			rb.constructReverses();
+			if(fixName) {
+				rb.fixMateName(2);
+			}
 			return success;
 		}
 	}
@@ -467,29 +455,6 @@ VectorPatternSource::VectorPatternSource(
 		// Initialize s
 		string s = ss[0];
 		int mytrim5 = gTrim5;
-		if(gColor && s.length() > 1) {
-			// This may be a primer character.  If so, keep it in the
-			// 'primer' field of the read buf and parse the rest of the
-			// read without it.
-			int c = toupper(s[0]);
-			if(asc2dnacat[c] > 0) {
-				// First char is a DNA char
-				int c2 = toupper(s[1]);
-				// Second char is a color char
-				if(asc2colcat[c2] > 0) {
-					mytrim5 += 2; // trim primer and first color
-				}
-			}
-		}
-		if(gColor) {
-			// Convert '0'-'3' to 'A'-'T'
-			for(size_t i = 0; i < s.length(); i++) {
-				if(s[i] >= '0' && s[i] <= '4') {
-					s[i] = "ACGTN"[(int)s[i] - '0'];
-				}
-				if(s[i] == '.') s[i] = 'N';
-			}
-		}
 		if(s.length() <= (size_t)(gTrim3 + mytrim5)) {
 			// Entire read is trimmed away
 			s.clear();
@@ -546,11 +511,12 @@ bool VectorPatternSource::nextReadImpl(
 	TReadId& rdid,
 	TReadId& endid,
 	bool& success,
-	bool& done)
+	bool& done,
+	bool lock)
 {
 	// Let Strings begin at the beginning of the respective bufs
 	r.reset();
-	ThreadSafe ts(&mutex,doLocking_);
+	ThreadSafe ts(&mutex, lock);
 	if(cur_ >= v_.size()) {
 		// Clear all the Strings, as a signal to the caller that
 		// we're out of reads
@@ -561,7 +527,6 @@ bool VectorPatternSource::nextReadImpl(
 		return false;
 	}
 	// Copy v_*, quals_* strings into the respective Strings
-	r.color = gColor;
 	r.patFw  = v_[cur_];
 	r.qual = quals_[cur_];
 	r.trimmed3 = trimmed3_[cur_];
@@ -597,7 +562,7 @@ bool VectorPatternSource::nextReadPairImpl(
 		paired_ = true;
 		cur_ <<= 1;
 	}
-	ThreadSafe ts(&mutex,doLocking_);
+	ThreadSafe ts(&mutex);
 	if(cur_ >= v_.size()-1) {
 		// Clear all the Strings, as a signal to the caller that
 		// we're out of reads
@@ -623,7 +588,6 @@ bool VectorPatternSource::nextReadPairImpl(
 	os << readCnt_;
 	ra.name = os.str();
 	rb.name = os.str();
-	ra.color = rb.color = gColor;
 	cur_++;
 	done = cur_ >= v_.size()-1;
 	rdid = endid = readCnt_;
@@ -695,17 +659,10 @@ int parseQuals(
 			}
 		}
 	}
-	if ((int)r.qual.length() < readLen-1 ||
-	    ((int)r.qual.length() < readLen && !r.color))
-	{
+	if ((int)r.qual.length() < readLen) {
 		tooFewQualities(r.name);
 	}
 	r.qual.trimEnd(trim3);
-	if(r.qual.length()-trim5 < r.patFw.length()) {
-		assert(gColor && r.primer != -1);
-		assert_gt(trim5, 0);
-		trim5--;
-	}
 	r.qual.trimBegin(trim5);
 	if(r.qual.length() <= 0) return 0;
 	assert_eq(r.qual.length(), r.patFw.length());
@@ -714,7 +671,7 @@ int parseQuals(
 }
 
 /// Read another pattern from a FASTA input file
-bool FastaPatternSource::read(
+bool FastaPatternSource::readLight(
 	Read& r,
 	TReadId& rdid,
 	TReadId& endid,
@@ -726,7 +683,6 @@ bool FastaPatternSource::read(
 	done = false;
 	assert(fb_.isOpen());
 	r.reset();
-	r.color = gColor;
 	// Pick off the first carat
 	c = fb_.get();
 	if(c < 0) {
@@ -792,29 +748,7 @@ bool FastaPatternSource::read(
 	// line, and c holds the first character
 	int begin = 0;
 	int mytrim5 = gTrim5;
-	if(gColor) {
-		// This is the primer character, keep it in the
-		// 'primer' field of the read buf and keep parsing
-		c = toupper(c);
-		if(asc2dnacat[c] > 0) {
-			// First char is a DNA char
-			int c2 = toupper(fb_.peek());
-			if(asc2colcat[c2] > 0) {
-				// Second char is a color char
-				r.primer = c;
-				r.trimc = c2;
-				mytrim5 += 2;
-			}
-		}
-		if(c < 0) {
-			bail(r); success = false; done = true; return success;
-		}
-	}
 	while(c != '>' && c >= 0) {
-		if(gColor) {
-			if(c >= '0' && c <= '4') c = "ACGTN"[(int)c - '0'];
-			if(c == '.') c = 'N';
-		}
 		if(asc2dnacat[c] > 0 && begin++ >= mytrim5) {
 			r.patFw.append(asc2dna[c]);
 			r.qual.append('I');
@@ -840,8 +774,14 @@ bool FastaPatternSource::read(
 	return success;
 }
 
-/// Read another pattern from a FASTQ input file
-bool FastqPatternSource::read(
+/**
+ * "Light" parser.  This is inside the critical section, so the key is to do
+ * just enough parsing so that another function downstream (finalize()) can do
+ * the rest of the parsing.  Really this function's only job is to stick every
+ * for lines worth of the input file into a buffer (r.readOrigBuf).  finalize()
+ * then parses the contents of r.readOrigBuf later.
+ */
+bool FastqPatternSource::readLight(
 	Read& r,
 	TReadId& rdid,
 	TReadId& endid,
@@ -849,306 +789,133 @@ bool FastqPatternSource::read(
 	bool& done)
 {
 	int c;
-	int dstLen = 0;
 	success = true;
 	done = false;
-	r.reset();
-	r.color = gColor;
-	r.fuzzy = fuzzy_;
-	// Pick off the first at
+	r.readOrigBuf.clear();
 	if(first_) {
-		c = fb_.get();
-		if(c != '@') {
-			c = getOverNewline(fb_);
-			if(c < 0) {
-				bail(r); success = false; done = true; return success;
-			}
+		c = getc_unlocked(fp_);
+		while(c == '\r' || c == '\n') {
+			c = getc_unlocked(fp_);
 		}
 		if(c != '@') {
 			cerr << "Error: reads file does not look like a FASTQ file" << endl;
 			throw 1;
 		}
+		r.readOrigBuf.append(c);
 		assert_eq('@', c);
 		first_ = false;
 	}
-
-	// Read to the end of the id line, sticking everything after the '@'
-	// into *name
-	while(true) {
-		c = fb_.get();
-		if(c < 0) {
-			bail(r); success = false; done = true; return success;
+	// Note: to reduce the number of times we have to enter the critical
+	// section (each entrance has some assocaited overhead), we could populate
+	// the buffer with several reads worth of data here, instead of just one.
+	int newlines = 4;
+	while(newlines) {
+		c = getc_unlocked(fp_);
+		if(c == '\n' || (c < 0 && newlines == 1)) {
+			newlines--;
+			c = '\n';
+		} else if(c < 0) {
+			success = false; done = true; return false;
 		}
+		r.readOrigBuf.append(c);
+	}
+	rdid = endid = readCnt_;
+	readCnt_++;
+	return true;
+}
+
+/// Read another pattern from a FASTQ input file
+void FastqPatternSource::finalize(Read &r) const {
+	int c;
+	size_t cur = 1;
+
+	// Parse read name
+	assert(r.name.empty());
+	while(true) {
+		assert(cur < r.readOrigBuf.length());
+		c = r.readOrigBuf[cur++];
 		if(c == '\n' || c == '\r') {
-			// Break at end of line, after consuming all \r's, \n's
-			while(c == '\n' || c == '\r') {
-				c = fb_.get();
-				if(c < 0) {
-					bail(r); success = false; done = true; return success;
-				}
-			}
+			do {
+				c = r.readOrigBuf[cur++];
+			} while(c == '\n' || c == '\r');
 			break;
 		}
 		r.name.append(c);
 	}
-	// fb_ now points just past the first character of a
-	// sequence line, and c holds the first character
-	int charsRead = 0;
-	BTDnaString *sbuf = &r.patFw;
-	int dstLens[] = {0, 0, 0, 0};
-	int *dstLenCur = &dstLens[0];
-	int mytrim5 = gTrim5;
-	int altBufIdx = 0;
-	if(gColor && c != '+') {
-		// This may be a primer character.  If so, keep it in the
-		// 'primer' field of the read buf and parse the rest of the
-		// read without it.
-		c = toupper(c);
-		if(asc2dnacat[c] > 0) {
-			// First char is a DNA char
-			int c2 = toupper(fb_.peek());
-			// Second char is a color char
-			if(asc2colcat[c2] > 0) {
-				r.primer = c;
-				r.trimc = c2;
-				mytrim5 += 2; // trim primer and first color
+	
+	// Parse sequence
+	int nchar = 0;
+	assert(r.patFw.empty());
+	while(c != '+') {
+		if(c == '.') {
+			c = 'N';
+		}
+		if(isalpha(c)) {
+			// If it's past the 5'-end trim point
+			if(nchar++ >= gTrim5) {
+				r.patFw.append(asc2dna[c]);
 			}
 		}
-		if(c < 0) {
-			bail(r); success = false; done = true; return success;
-		}
+		assert(cur < r.readOrigBuf.length());
+		c = r.readOrigBuf[cur++];
 	}
-	int trim5 = 0;
-	if(c != '+') {
-		trim5 = mytrim5;
-		while(c != '+') {
-			// Convert color numbers to letters if necessary
-			if(c == '.') c = 'N';
-			if(gColor) {
-				if(c >= '0' && c <= '4') c = "ACGTN"[(int)c - '0'];
-			}
-			if(fuzzy_ && c == '-') c = 'A';
-			if(isalpha(c)) {
-				// If it's past the 5'-end trim point
-				if(charsRead >= trim5) {
-					sbuf->append(asc2dna[c]);
-					(*dstLenCur)++;
-				}
-				charsRead++;
-			} else if(fuzzy_ && c == ' ') {
-				trim5 = 0; // disable 5' trimming for now
-				if(charsRead == 0) {
-					c = fb_.get();
-					continue;
-				}
-				charsRead = 0;
-				if(altBufIdx >= 3) {
-					cerr << "At most 3 alternate sequence strings permitted; offending read: " << r.name << endl;
-					throw 1;
-				}
-				// Move on to the next alternate-sequence buffer
-				sbuf = &r.altPatFw[altBufIdx++];
-				dstLenCur = &dstLens[altBufIdx];
-			}
-			c = fb_.get();
-			if(c < 0) {
-				bail(r); success = false; done = true; return success;
-			}
-		}
-		dstLen = dstLens[0];
-		charsRead = dstLen + mytrim5;
-	}
-	// Trim from 3' end
-	if(gTrim3 > 0) {
-		if((int)r.patFw.length() > gTrim3) {
-			r.patFw.resize(r.patFw.length() - gTrim3);
-			dstLen -= gTrim3;
-			assert_eq((int)r.patFw.length(), dstLen);
-		} else {
-			// Trimmed the whole read; we won't be using this read,
-			// but we proceed anyway so that fb_ is advanced
-			// properly
-			r.patFw.clear();
-			dstLen = 0;
-		}
-	}
+	r.trimmed5 = (int)(nchar - r.patFw.length());
+	r.trimmed3 = (int)(r.patFw.trimEnd(gTrim3));
+	
 	assert_eq('+', c);
-
-	// Chew up the optional name on the '+' line
-	ASSERT_ONLY(int pk =) peekToEndOfLine(fb_);
-	if(charsRead == 0) {
-		assert_eq('@', pk);
-		fb_.get();
-		fb_.resetLastN();
-		rdid = endid = readCnt_;
-		readCnt_++;
-		return success;
+	do {
+		assert(cur < r.readOrigBuf.length());
+		c = r.readOrigBuf[cur++];
+	} while(c != '\n' && c != '\r');
+	do {
+		assert(cur < r.readOrigBuf.length());
+		c = r.readOrigBuf[cur++];
+	} while(c == '\n' || c == '\r');
+	
+	// Now we're on the next non-blank line after the + line
+	if(r.patFw.empty()) {
+		return; // done parsing empty read
 	}
 
-	// Now read the qualities
+	assert(r.qual.empty());
+	int nqual = 0;
 	if (intQuals_) {
-		assert(!fuzzy_);
-		int qualsRead = 0;
-		char buf[4096];
-		if(gColor && r.primer != -1) {
-			// In case the original quality string is one shorter
-			mytrim5--;
-		}
-		qualToks_.clear();
-		tokenizeQualLine(fb_, buf, 4096, qualToks_);
-		for(unsigned int j = 0; j < qualToks_.size(); ++j) {
-			char c = intToPhred33(atoi(qualToks_[j].c_str()), solQuals_);
-			assert_geq(c, 33);
-			if (qualsRead >= mytrim5) {
-				r.qual.append(c);
-			}
-			++qualsRead;
-		} // done reading integer quality lines
-		if(gColor && r.primer != -1) mytrim5++;
-		r.qual.trimEnd(gTrim3);
-		if(r.qual.length() < r.patFw.length()) {
-			tooFewQualities(r.name);
-		} else if(r.qual.length() > r.patFw.length() + 1) {
-			tooManyQualities(r.name);
-		}
-		if(r.qual.length() == r.patFw.length()+1 && gColor && r.primer != -1) {
-			r.qual.remove(0);
-		}
-		// Trim qualities on 3' end
-		if(r.qual.length() > r.patFw.length()) {
-			r.qual.resize(r.patFw.length());
-			assert_eq((int)r.qual.length(), dstLen);
-		}
-		peekOverNewline(fb_);
+		throw 1; // not yet implemented
 	} else {
-		// Non-integer qualities
-		altBufIdx = 0;
-		trim5 = mytrim5;
-		int qualsRead[4] = {0, 0, 0, 0};
-		int *qualsReadCur = &qualsRead[0];
-		BTString *qbuf = &r.qual;
-		if(gColor && r.primer != -1) {
-			// In case the original quality string is one shorter
-			trim5--;
+		c = charToPhred33(c, solQuals_, phred64Quals_);
+		if(nqual++ >= r.trimmed5) {
+			r.qual.append(c);
 		}
-		while(true) {
-			c = fb_.get();
-			if (!fuzzy_ && c == ' ') {
+		while(cur < r.readOrigBuf.length()) {
+			c = r.readOrigBuf[cur++];
+			if (c == ' ') {
 				wrongQualityFormat(r.name);
-			} else if(c == ' ') {
-				trim5 = 0; // disable 5' trimming for now
-				if((*qualsReadCur) == 0) continue;
-				if(altBufIdx >= 3) {
-					cerr << "At most 3 alternate quality strings permitted; offending read: " << r.name << endl;
-					throw 1;
-				}
-				qbuf = &r.altQual[altBufIdx++];
-				qualsReadCur = &qualsRead[altBufIdx];
-				continue;
 			}
-			if(c < 0) {
-				break; // let the file end just at the end of a quality line
-				//bail(r); success = false; done = true; return success;
-			}
-			if (c != '\r' && c != '\n') {
-				if (*qualsReadCur >= trim5) {
-					c = charToPhred33(c, solQuals_, phred64Quals_);
-					assert_geq(c, 33);
-					qbuf->append(c);
-				}
-				(*qualsReadCur)++;
-			} else {
+			if(c == '\r' || c == '\n') {
 				break;
 			}
+			c = charToPhred33(c, solQuals_, phred64Quals_);
+			if(nqual++ >= r.trimmed5) {
+				r.qual.append(c);
+			}
 		}
-		qualsRead[0] -= gTrim3;
-		r.qual.trimEnd(gTrim3);
+		r.qual.trimEnd(r.trimmed3);
 		if(r.qual.length() < r.patFw.length()) {
 			tooFewQualities(r.name);
-		} else if(r.qual.length() > r.patFw.length()+1) {
+		} else if(r.qual.length() > r.patFw.length()) {
 			tooManyQualities(r.name);
 		}
-		if(r.qual.length() == r.patFw.length()+1 && gColor && r.primer != -1) {
-			r.qual.remove(0);
-		}
-
-		if(fuzzy_) {
-			// Trim from 3' end of alternate basecall and quality strings
-			if(gTrim3 > 0) {
-				for(int i = 0; i < 3; i++) {
-					assert_eq(r.altQual[i].length(), r.altPatFw[i].length());
-					if((int)r.altQual[i].length() > gTrim3) {
-						r.altPatFw[i].resize(gTrim3);
-						r.altQual[i].resize(gTrim3);
-					} else {
-						r.altPatFw[i].clear();
-						r.altQual[i].clear();
-					}
-					qualsRead[i+1] = dstLens[i+1] =
-						max<int>(0, dstLens[i+1] - gTrim3);
-				}
-			}
-			// Shift to RHS, and install in Strings
-			assert_eq(0, r.alts);
-			for(int i = 1; i < 4; i++) {
-				if(qualsRead[i] == 0) continue;
-				if(qualsRead[i] > dstLen) {
-					// Shift everybody up
-					int shiftAmt = qualsRead[i] - dstLen;
-					for(int j = 0; j < dstLen; j++) {
-						r.altQual[i-1].set(r.altQual[i-1][j+shiftAmt], j);
-						r.altPatFw[i-1].set(r.altPatFw[i-1][j+shiftAmt], j);
-					}
-					r.altQual[i-1].resize(dstLen);
-					r.altPatFw[i-1].resize(dstLen);
-				} else if (qualsRead[i] < dstLen) {
-					r.altQual[i-1].resize(dstLen);
-					r.altPatFw[i-1].resize(dstLen);
-					// Shift everybody down
-					int shiftAmt = dstLen - qualsRead[i];
-					for(int j = dstLen-1; j >= shiftAmt; j--) {
-						r.altQual[i-1].set(r.altQual[i-1][j-shiftAmt], j);
-						r.altPatFw[i-1].set(r.altPatFw[i-1][j-shiftAmt], j);
-					}
-					// Fill in unset positions
-					for(int j = 0; j < shiftAmt; j++) {
-						// '!' - indicates no alternate basecall at
-						// this position
-						r.altQual[i-1].set(33, j);
-					}
-				}
-				r.alts++;
-			}
-		}
-
-		if(c == '\r' || c == '\n') {
-			c = peekOverNewline(fb_);
-		} else {
-			c = peekToEndOfLine(fb_);
-		}
 	}
-	r.readOrigBuf.install(fb_.lastN(), fb_.lastNLen());
-	fb_.resetLastN();
-
-	c = fb_.get();
-	// Should either be at end of file or at beginning of next record
-	assert(c == -1 || c == '@');
-
 	// Set up a default name if one hasn't been set
 	if(r.name.empty()) {
 		char cbuf[20];
 		itoa10<TReadId>(readCnt_, cbuf);
 		r.name.install(cbuf);
 	}
-	r.trimmed3 = gTrim3;
-	r.trimmed5 = mytrim5;
-	rdid = endid = readCnt_;
-	readCnt_++;
-	return success;
 }
 
 /// Read another pattern from a FASTA input file
-bool TabbedPatternSource::read(
+bool TabbedPatternSource::readLight(
 	Read& r,
 	TReadId& rdid,
 	TReadId& endid,
@@ -1156,7 +923,6 @@ bool TabbedPatternSource::read(
 	bool& done)
 {
 	r.reset();
-	r.color = gColor;
 	success = true;
 	done = false;
 	// fb_ is about to dish out the first character of the
@@ -1206,7 +972,7 @@ bool TabbedPatternSource::read(
 }
 
 /// Read another pair of patterns from a FASTA input file
-bool TabbedPatternSource::readPair(
+bool TabbedPatternSource::readPairLight(
 	Read& ra,
 	Read& rb,
 	TReadId& rdid,
@@ -1388,29 +1154,7 @@ int TabbedPatternSource::parseSeq(
 	int c = fb_.get();
 	assert(c != upto);
 	r.patFw.clear();
-	r.color = gColor;
-	if(gColor) {
-		// This may be a primer character.  If so, keep it in the
-		// 'primer' field of the read buf and parse the rest of the
-		// read without it.
-		c = toupper(c);
-		if(asc2dnacat[c] > 0) {
-			// First char is a DNA char
-			int c2 = toupper(fb_.peek());
-			// Second char is a color char
-			if(asc2colcat[c2] > 0) {
-				r.primer = c;
-				r.trimc = c2;
-				trim5 += 2; // trim primer and first color
-			}
-		}
-		if(c < 0) { return -1; }
-	}
 	while(c != upto) {
-		if(gColor) {
-			if(c >= '0' && c <= '4') c = "ACGTN"[(int)c - '0'];
-			if(c == '.') c = 'N';
-		}
 		if(isalpha(c)) {
 			assert_in(toupper(c), "ACGTN");
 			if(begin++ >= trim5) {

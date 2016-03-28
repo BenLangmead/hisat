@@ -63,7 +63,6 @@
 
 	CohortLock::CohortLock()
 	{
-		assert(numa_available()!=-1);
 		num_numa_nodes = 1024;
 		//printf("num numa nodes %d\n",num_numa_nodes);
 		//this->starvation_limit = starvation_limit;
@@ -78,6 +77,7 @@
 			local_locks[i].set_id(i+1);
 		}
 		global_lock = new MUTEX_G();
+		lockers_numa_idx = -1;
 	}
 	
 	CohortLock::~CohortLock()

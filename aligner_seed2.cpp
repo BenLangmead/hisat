@@ -43,11 +43,10 @@ int main(int argc, char **argv) {
     //                            GCTATATAGCGCGCTTGCATCATTTTGTGT
     //                                           ^
     bool packed = false;
-    int color = 0;
 	pair<Ebwt*, Ebwt*> ebwts = Ebwt::fromStrings<SString<char> >(
 		strs,
 		packed,
-		color,
+		0,
 		REF_READ_REVERSE,
 		Ebwt::default_bigEndian,
 		Ebwt::default_lineRate,
@@ -64,8 +63,8 @@ int main(int argc, char **argv) {
 		false,  // autoMem
 		false); // sanity
     
-    ebwts.first->loadIntoMemory (color, -1, true, true, true, true, false);
-    ebwts.second->loadIntoMemory(color,  1, true, true, true, true, false);
+    ebwts.first->loadIntoMemory (0, -1, true, true, true, true, false);
+    ebwts.second->loadIntoMemory(0,  1, true, true, true, true, false);
 	
 	int testnum = 0;
 
@@ -230,7 +229,7 @@ int main(int argc, char **argv) {
 	ebwts = Ebwt::fromStrings<SString<char> >(
 		strs,
 		packed,
-		color,
+		0,
 		REF_READ_REVERSE,
 		Ebwt::default_bigEndian,
 		Ebwt::default_lineRate,
@@ -247,8 +246,8 @@ int main(int argc, char **argv) {
 		false,  // autoMem
 		false); // sanity
     
-    ebwts.first->loadIntoMemory (color, -1, true, true, true, true, false);
-    ebwts.second->loadIntoMemory(color,  1, true, true, true, true, false);
+    ebwts.first->loadIntoMemory (0, -1, true, true, true, true, false);
+    ebwts.second->loadIntoMemory(0,  1, true, true, true, true, false);
 	
 	// Query is longer than ftab and matches exactly once.  One search root for
 	// forward read.
@@ -1057,7 +1056,7 @@ int main(int argc, char **argv) {
 	ebwts = Ebwt::fromStrings<SString<char> >(
 		strs,
 		packed,
-		color,
+		0,
 		REF_READ_REVERSE,
 		Ebwt::default_bigEndian,
 		Ebwt::default_lineRate,
@@ -1074,8 +1073,8 @@ int main(int argc, char **argv) {
 		false,  // autoMem
 		false); // sanity
     
-    ebwts.first->loadIntoMemory (color, -1, true, true, true, true, false);
-    ebwts.second->loadIntoMemory(color,  1, true, true, true, true, false);
+    ebwts.first->loadIntoMemory (0, -1, true, true, true, true, false);
+    ebwts.second->loadIntoMemory(0,  1, true, true, true, true, false);
 
 	// Query is longer than ftab and matches exactly once with one read gap,
 	// one ref gap, and one mismatch

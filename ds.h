@@ -112,7 +112,11 @@ public:
 	AutoArray(size_t sz, int cat = 0) : cat_(cat) {
 		t_ = NULL;
 		t_ = new T[sz];
+#ifdef USE_MEM_TALLY
 		gMemTally.add(cat_, sz);
+#else
+		(void)cat_;
+#endif
 		memset(t_, 0, sz * sizeof(T));
 		sz_ = sz;
 	}
@@ -120,7 +124,9 @@ public:
 	~AutoArray() {
 		if(t_ != NULL) {
 			delete[] t_;
+#ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, sz_);
+#endif
 		}
 	}
 	
@@ -177,16 +183,22 @@ public:
 		assert(p_ == NULL);
 		p_ = p;
 		freeable_ = freeable;
+#ifdef USE_MEM_TALLY
 		if(p != NULL && freeable_) {
 			gMemTally.add(cat_, sizeof(T));
 		}
+#else
+		(void)cat_;
+#endif
 	}
 	
 	void free() {
 		if(p_ != NULL) {
 			if(freeable_) {
 				delete p_;
+#ifdef USE_MEM_TALLY
 				gMemTally.del(cat_, sizeof(T));
+#endif
 			}
 			p_ = NULL;
 		}
@@ -240,16 +252,22 @@ public:
 		p_ = p;
 		sz_ = sz;
 		freeable_ = freeable;
+#ifdef USE_MEM_TALLY
 		if(p != NULL && freeable_) {
 			gMemTally.add(cat_, sizeof(T) * sz_);
 		}
+#else
+		(void)cat_;
+#endif
 	}
 	
 	void free() {
 		if(p_ != NULL) {
 			if(freeable_) {
 				delete[] p_;
+#ifdef USE_MEM_TALLY
 				gMemTally.del(cat_, sizeof(T) * sz_);
+#endif
 			}
 			p_ = NULL;
 		}
@@ -897,7 +915,9 @@ private:
 	T *alloc(size_t sz) {
 		T* tmp = new T[sz];
 		assert(tmp != NULL);
+#ifdef USE_MEM_TALLY
 		gMemTally.add(cat_, sz);
+#endif
 		allocCat_ = cat_;
 		return tmp;
 	}
@@ -911,7 +931,9 @@ private:
 			assert_neq(-1, allocCat_);
 			assert_eq(allocCat_, cat_);
 			delete[] list_;
+#ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, sz_);
+#endif
 			list_ = NULL;
 			sz_ = cur_ = 0;
 		}
@@ -1256,7 +1278,9 @@ protected:
 	EList<T, S1> *alloc(size_t sz) {
 		assert_gt(sz, 0);
 		EList<T, S1> *tmp = new EList<T, S1>[sz];
+#ifdef USE_MEM_TALLY
 		gMemTally.add(cat_, sz);
+#endif
 		if(cat_ != 0) {
 			for(size_t i = 0; i < sz; i++) {
 				assert(tmp[i].ptr() == NULL);
@@ -1273,7 +1297,9 @@ protected:
 	void free() {
 		if(list_ != NULL) {
 			delete[] list_;
+#ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, sz_);
+#endif
 			list_ = NULL;
 		}
 	}
@@ -1592,7 +1618,9 @@ protected:
 	ELList<T, S1, S2> *alloc(size_t sz) {
 		assert_gt(sz, 0);
 		ELList<T, S1, S2> *tmp = new ELList<T, S1, S2>[sz];
+#ifdef USE_MEM_TALLY
 		gMemTally.add(cat_, sz);
+#endif
 		if(cat_ != 0) {
 			for(size_t i = 0; i < sz; i++) {
 				assert(tmp[i].ptr() == NULL);
@@ -1609,7 +1637,9 @@ protected:
 	void free() {
 		if(list_ != NULL) {
 			delete[] list_;
+#ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, sz_);
+#endif
 			list_ = NULL;
 		}
 	}
@@ -1880,7 +1910,9 @@ private:
 	T *alloc(size_t sz) {
 		assert_gt(sz, 0);
 		T *tmp = new T[sz];
+#ifdef USE_MEM_TALLY
 		gMemTally.add(cat_, sz);
+#endif
 		return tmp;
 	}
 
@@ -1891,7 +1923,9 @@ private:
 	void free() {
 		if(list_ != NULL) {
 			delete[] list_;
+#ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, sz_);
+#endif
 			list_ = NULL;
 		}
 	}
@@ -2272,7 +2306,9 @@ protected:
 	ESet<T> *alloc(size_t sz) {
 		assert_gt(sz, 0);
 		ESet<T> *tmp = new ESet<T>[sz];
+#ifdef USE_MEM_TALLY
 		gMemTally.add(cat_, sz);
+#endif
 		if(cat_ != 0) {
 			for(size_t i = 0; i < sz; i++) {
 				assert(tmp[i].ptr() == NULL);
@@ -2289,7 +2325,9 @@ protected:
 	void free() {
 		if(list_ != NULL) {
 			delete[] list_;
+#ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, sz_);
+#endif
 			list_ = NULL;
 		}
 	}
@@ -2539,7 +2577,9 @@ private:
 	std::pair<K, V> *alloc(size_t sz) {
 		assert_gt(sz, 0);
 		std::pair<K, V> *tmp = new std::pair<K, V>[sz];
+#ifdef USE_MEM_TALLY
 		gMemTally.add(cat_, sz);
+#endif
 		return tmp;
 	}
 
@@ -2550,7 +2590,9 @@ private:
 	void free() {
 		if(list_ != NULL) {
 			delete[] list_;
+#ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, sz_);
+#endif
 			list_ = NULL;
 		}
 	}
@@ -3016,7 +3058,12 @@ public:
 	{
 		for(size_t i = 0; i < ((bytes+pagesz-1)/pagesz); i++) {
 			pages_.push_back(new uint8_t[pagesz]);
+#ifdef USE_MEM_TALLY
 			gMemTally.add(cat, pagesz);
+#else
+			(void)cat_;
+			(void)pagesz_;
+#endif
 			assert(pages_.back() != NULL);
 		}
 		assert(repOk());
@@ -3029,7 +3076,11 @@ public:
 		for(size_t i = 0; i < pages_.size(); i++) {
 			assert(pages_[i] != NULL);
 			delete[] pages_[i];
+#ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, pagesz_);
+#else
+			(void)cat_;
+#endif
 		}
 	}
 

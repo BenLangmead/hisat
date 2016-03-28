@@ -86,28 +86,6 @@ int QseqPatternSource::parseSeq(
 	int c = fb_.get();
 	assert(c != upto);
 	r.patFw.clear();
-	r.color = gColor;
-	if(gColor) {
-		// NOTE: clearly this is not relevant for Illumina output, but
-		// I'm keeping it here in case there's some reason to put SOLiD
-		// data in this format in the future.
-	
-		// This may be a primer character.  If so, keep it in the
-		// 'primer' field of the read buf and parse the rest of the
-		// read without it.
-		c = toupper(c);
-		if(asc2dnacat[c] > 0) {
-			// First char is a DNA char
-			int c2 = toupper(fb_.peek());
-			// Second char is a color char
-			if(asc2colcat[c2] > 0) {
-				r.primer = c;
-				r.trimc = c2;
-				trim5 += 2; // trim primer and first color
-			}
-		}
-		if(c < 0) { return -1; }
-	}
 	while(c != upto) {
 		if(c == '.') c = 'N';
 		if(gColor) {
@@ -199,7 +177,7 @@ int QseqPatternSource::parseQuals(
 /**
  * Read another pattern from a Qseq input file.
  */
-bool QseqPatternSource::read(
+bool QseqPatternSource::readLight(
 	Read& r,
 	TReadId& rdid,
 	TReadId& endid,
@@ -207,7 +185,6 @@ bool QseqPatternSource::read(
 	bool& done)
 {
 	r.reset();
-	r.color = gColor;
 	success = true;
 	done = false;
 	readCnt_++;

@@ -266,7 +266,7 @@ int64_t SplicedAligner<index_t, local_index_t>::hybridSearch_recur(
     // if this is a full alignment, report it
     if(hitoff == 0 && hitlen == rdlen) {
         if(!this->redundant(sink, rdi, hit)) {
-            bool another_spliced = false;
+            //bool another_spliced = false;
             if(!ssdb.empty()) {
                 int64_t best_score = hit.score();
                 local_genomeHits.clear();
@@ -309,7 +309,7 @@ int64_t SplicedAligner<index_t, local_index_t>::hybridSearch_recur(
                         else         minsc = max(minsc, sink.bestUnp2());
                         if(combined && tempHit.score() >= minsc) {
                             if(!this->redundant(sink, rdi, tempHit)) {
-                                another_spliced = true;
+                                //another_spliced = true;
                                 if(tempHit.score() > best_score)
                                     best_score = tempHit.score();
                                 local_genomeHits.expand();
@@ -359,7 +359,7 @@ int64_t SplicedAligner<index_t, local_index_t>::hybridSearch_recur(
                             else         minsc = max(minsc, sink.bestUnp2());
                             if(combined && combinedHit.score() >= minsc) {
                                 if(!this->redundant(sink, rdi, combinedHit)) {
-                                    another_spliced = true;
+                                    //another_spliced = true;
                                     if(combinedHit.score() > best_score)
                                         best_score = tempHit.score();
                                     local_genomeHits.expand();
