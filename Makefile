@@ -92,7 +92,7 @@ endif
 
 ifeq (1,$(WITH_TBB))
 	LIBS = $(PTHREAD_LIB) -ltbb -ltbbmalloc_proxy
-	EXTRA_FLAGS += -DWITH_TBB 
+	override EXTRA_FLAGS += -DWITH_TBB
 else
 	LIBS = $(PTHREAD_LIB)
 endif
@@ -121,10 +121,19 @@ ifeq (1,$(WITH_AFFINITY))
 	override EXTRA_FLAGS += -DWITH_AFFINITY=1
 endif
 
+ifeq (1,$(WITH_QUEUELOCK))
+	override EXTRA_FLAGS += -DWITH_QUEUELOCK=1
+endif
+
 SHARED_CPPS = ccnt_lut.cpp ref_read.cpp alphabet.cpp shmem.cpp \
 	edit.cpp bt2_idx.cpp \
 	reference.cpp ds.cpp multikey_qsort.cpp limit.cpp \
 	random_source.cpp
+
+ifeq (1,$(WITH_COHORTLOCK))
+	override EXTRA_FLAGS += -DWITH_COHORTLOCK=1
+	SHARED_CPPS += cohort.cpp cpu_numa_info.cpp
+endif
 
 ifneq (1,$(WITH_TBB))
 	SHARED_CPPS += tinythread.cpp

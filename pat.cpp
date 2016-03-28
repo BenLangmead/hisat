@@ -177,10 +177,9 @@ bool PairedSoloPatternSource::nextReadPair(
 			assert(done);
 			// If patFw is empty, that's our signal that the
 			// input dried up
-			lock();
+			ThreadSafe ts(&mutex_m);
 			if(cur + 1 > cur_) cur_++;
 			cur = cur_;
-			unlock();
 			continue; // on to next pair of PatternSources
 		}
 		assert(success);
@@ -223,11 +222,10 @@ bool PairedDualPatternSource::nextReadPair(
 	bool fixName)
 {
 	// 'cur' indexes the current pair of PatternSources
-	uint32_t cur;
+	uint32_t cur = cur_;
 	{
-		lock();
+		ThreadSafe ts(&mutex_m);
 		cur = cur_;
-		unlock();
 	}
 	success = false;
 	done = true;
@@ -240,10 +238,9 @@ bool PairedDualPatternSource::nextReadPair(
 			} while(!success && !done);
 			if(!success) {
 				assert(done);
-				lock();
+				ThreadSafe ts(&mutex_m);
 				if(cur + 1 > cur_) cur_++;
 				cur = cur_; // Move on to next PatternSource
-				unlock();
 				continue; // on to next pair of PatternSources
 			}
 			ra.rdid = rdid;
@@ -259,30 +256,29 @@ bool PairedDualPatternSource::nextReadPair(
 			bool success_b = false, done_b = false;
 			// Lock to ensure that this thread gets parallel reads
 			// in the two mate files
-			lock();
-			do {
-				(*srca_)[cur]->nextRead(ra, rdid_a, endid_a, success_a, done_a);
-			} while(!success_a && !done_a);
-			do {
-				(*srcb_)[cur]->nextRead(rb, rdid_b, endid_b, success_b, done_b);
-			} while(!success_b && !done_b);
-			if(!success_a && success_b) {
-				cerr << "Error, fewer reads in file specified with -1 than in file specified with -2" << endl;
-				throw 1;
-			} else if(!success_a) {
-				assert(done_a && done_b);
-				if(cur + 1 > cur_) cur_++;
-				cur = cur_; // Move on to next PatternSource
-				unlock();
-				continue; // on to next pair of PatternSources
-			} else if(!success_b) {
-				cerr << "Error, fewer reads in file specified with -2 than in file specified with -1" << endl;
-				throw 1;
+			{
+				ThreadSafe ts(&mutex_m);
+				do {
+					(*srca_)[cur]->nextRead(ra, rdid_a, endid_a, success_a, done_a);
+				} while(!success_a && !done_a);
+				do {
+					(*srcb_)[cur]->nextRead(rb, rdid_b, endid_b, success_b, done_b);
+				} while(!success_b && !done_b);
+				if(!success_a && success_b) {
+					cerr << "Error, fewer reads in file specified with -1 than in file specified with -2" << endl;
+					throw 1;
+				} else if(!success_a) {
+					assert(done_a && done_b);
+					if(cur + 1 > cur_) cur_++;
+					cur = cur_; // Move on to next PatternSource
+					continue; // on to next pair of PatternSources
+				} else if(!success_b) {
+					cerr << "Error, fewer reads in file specified with -2 than in file specified with -1" << endl;
+					throw 1;
+				}
 			}
 			assert_eq(rdid_a, rdid_b);
-			//assert_eq(endid_a+1, endid_b);
 			assert_eq(success_a, success_b);
-			unlock();
 			if(fixName) {
 				ra.fixMateName(1);
 				rb.fixMateName(2);
@@ -554,9 +550,8 @@ bool VectorPatternSource::nextReadImpl(
 {
 	// Let Strings begin at the beginning of the respective bufs
 	r.reset();
-	lock();
+	ThreadSafe ts(&mutex,doLocking_);
 	if(cur_ >= v_.size()) {
-		unlock();
 		// Clear all the Strings, as a signal to the caller that
 		// we're out of reads
 		r.reset();
@@ -578,7 +573,6 @@ bool VectorPatternSource::nextReadImpl(
 	done = cur_ == v_.size();
 	rdid = endid = readCnt_;
 	readCnt_++;
-	unlock();
 	success = true;
 	return true;
 }
@@ -603,9 +597,8 @@ bool VectorPatternSource::nextReadPairImpl(
 		paired_ = true;
 		cur_ <<= 1;
 	}
-	lock();
+	ThreadSafe ts(&mutex,doLocking_);
 	if(cur_ >= v_.size()-1) {
-		unlock();
 		// Clear all the Strings, as a signal to the caller that
 		// we're out of reads
 		ra.reset();
@@ -635,7 +628,6 @@ bool VectorPatternSource::nextReadPairImpl(
 	done = cur_ >= v_.size()-1;
 	rdid = endid = readCnt_;
 	readCnt_++;
-	unlock();
 	success = true;
 	return true;
 }
