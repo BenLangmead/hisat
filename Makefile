@@ -102,6 +102,10 @@ ifeq (1,$(USE_SRA))
 	SEARCH_LIBS += -L$(NCBI_NGS_DIR)/lib64 -L$(NCBI_VDB_DIR)/lib64
 endif
 
+ifeq (1,$(WITH_THREAD_PROFILING))
+	override EXTRA_FLAGS += -DPER_THREAD_TIMING=1
+endif
+
 LIBS = $(PTHREAD_LIB)
 
 SHARED_CPPS = ccnt_lut.cpp ref_read.cpp alphabet.cpp shmem.cpp \
