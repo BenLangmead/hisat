@@ -87,7 +87,7 @@ BUILD_LIBS =
 INSPECT_LIBS =
 
 ifeq (1,$(NO_SPINLOCK))
-	override EXTRA_FLAGS += -DNO_SPIN_LOCK
+	override EXTRA_FLAGS += -DNO_SPINLOCK
 endif
 
 ifeq (1,$(WITH_TBB))
