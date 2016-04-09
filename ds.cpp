@@ -19,7 +19,9 @@
 
 #include "ds.h"
 
+#ifdef USE_MEM_TALLY
 MemoryTally gMemTally;
+#endif
 
 /**
  * Tally a memory allocation of size amt bytes.

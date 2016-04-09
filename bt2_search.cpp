@@ -2419,6 +2419,7 @@ struct PerfMetrics {
 		if(metricsStderr) stderrSs << buf << '\t';
 		if(o != NULL) { o->writeChars(buf); o->write('\t'); }
 		
+#ifdef USE_MEM_TALLY
 		// 121. Overall memory peak
 		itoa10<size_t>(gMemTally.peak() >> 20, buf);
 		if(metricsStderr) stderrSs << buf << '\t';
@@ -2455,6 +2456,7 @@ struct PerfMetrics {
 		itoa10<size_t>(gMemTally.peak(DEBUG_CAT) >> 20, buf);
 		if(metricsStderr) stderrSs << buf;
 		if(o != NULL) { o->writeChars(buf); }
+#endif
 
 		if(o != NULL) { o->write('\n'); }
 		if(metricsStderr) cerr << stderrSs.str().c_str() << endl;

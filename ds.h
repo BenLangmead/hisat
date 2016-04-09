@@ -99,7 +99,9 @@ protected:
 	uint64_t peak_;
 };
 
+#ifdef USE_MEM_TALLY
 extern MemoryTally gMemTally;
+#endif
 
 /**
  * A simple fixed-length array of type T, automatically freed in the
