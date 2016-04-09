@@ -590,7 +590,7 @@ public:
 	 * Return the lock object.
 	 */
 	MUTEX_T& lock() {
-	    return mutex_m;
+		return mutex_m;
 	}
 
 	/**
@@ -598,7 +598,7 @@ public:
 	 * write const member functions that grab the lock.
 	 */
 	MUTEX_T* lockPtr() const {
-	    return const_cast<MUTEX_T*>(&mutex_m);
+		return &mutex_m;
 	}
 	
 	/**
@@ -621,7 +621,7 @@ protected:
 	TSAList                salist_; // list of SA ranges
 	
 	bool     shared_;  // true -> this cache is global
-	MUTEX_T mutex_m;    // mutex used for syncronization in case the the cache is shared.
+	mutable MUTEX_T mutex_m;    // mutex used for syncronization in case the the cache is shared.
 	uint32_t version_; // cache version
 };
 
