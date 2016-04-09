@@ -59,6 +59,22 @@
 #include "mock_outq.h"
 #include "aligner_seed2.h"
 
+#ifdef WITH_TBB
+
+#include <tbb/tbb.h>
+#include <tbb/task_group.h>
+
+class multiseedSearchWorker_hisat {
+	int tid;
+
+public:
+	multiseedSearchWorker_hisat(const multiseedSearchWorker_hisat& W): tid(W.tid) {};
+	multiseedSearchWorker_hisat(int id):tid(id) {};
+	void operator()() const;
+};
+
+#endif /* WITH_TBB */
+
 using namespace std;
 
 static EList<string> mates1;  // mated reads (first mate)
@@ -2598,6 +2614,7 @@ struct PerfMetrics {
 		if(metricsStderr) stderrSs << buf << '\t';
 		if(o != NULL) { o->writeChars(buf); o->write('\t'); }
 		
+#ifdef USE_MEM_TALLY
 		// 121. Overall memory peak
 		itoa10<size_t>(gMemTally.peak() >> 20, buf);
 		if(metricsStderr) stderrSs << buf << '\t';
@@ -2634,6 +2651,7 @@ struct PerfMetrics {
 		itoa10<size_t>(gMemTally.peak(DEBUG_CAT) >> 20, buf);
         if(metricsStderr) stderrSs << buf << '\t';
 		if(o != NULL) { o->writeChars(buf); o->write('\t'); }
+#endif
         
         // 130
         itoa10<size_t>(him.localatts, buf);
@@ -2886,8 +2904,12 @@ void get_cpu_and_node(int& cpu, int& node) {
  *   + If not identical, continue
  * -
  */
+#ifdef WITH_TBB
+void multiseedSearchWorker_hisat::operator()() const {
+#else
 static void multiseedSearchWorker_hisat(void *vp) {
-	int tid = *((int*)vp);
+    int tid = *((int*)vp);
+#endif
 	assert(multiseed_ebwtFw != NULL);
 	assert(multiseedMms == 0 || multiseed_ebwtBw != NULL);
 	PairedPatternSource&             patsrc   = *multiseed_patsrc;
@@ -3437,8 +3459,12 @@ static void multiseedSearch(
 	multiseed_sc     = &sc;
 	multiseed_metricsOfb      = metricsOfb;
 	multiseed_refs = refs;
+#ifdef WITH_TBB
+	tbb::task_group tbb_grp;
+#else
 	AutoArray<tthread::thread*> threads(nthreads);
 	AutoArray<int> tids(nthreads);
+#endif
 	{
 		// Load the other half of the index into memory
 		assert(!ebwtFw.isInMemory());
@@ -3478,13 +3504,21 @@ static void multiseedSearch(
         thread_rids_mindist = (nthreads == 1 || !useTempSpliceSite ? 0 : 1000 * nthreads);
 
 		for(int i = 0; i < nthreads; i++) {
+#ifdef WITH_TBB
+            tbb_grp.run(multiseedSearchWorker_hisat(i+1));
+#else
 			// Thread IDs start at 1
 			tids[i] = i+1;
             threads[i] = new tthread::thread(multiseedSearchWorker_hisat, (void*)&tids[i]);
+#endif
 		}
 
+#ifdef WITH_TBB
+        tbb_grp.wait();
+#else
         for (int i = 0; i < nthreads; i++)
             threads[i]->join();
+#endif
 
 	}
 	if(!metricsPerRead && (metricsOfb != NULL || metricsStderr)) {
@@ -3529,7 +3563,8 @@ static void driver(
 		fuzzy,         // true -> try to parse fuzzy fastq
 		fastaContLen,  // length of sampled reads for FastaContinuous...
 		fastaContFreq, // frequency of sampled reads for FastaContinuous...
-		skipReads      // skip the first 'skip' patterns
+		skipReads,     // skip the first 'skip' patterns
+		nthreads       // # threads
 	);
 	if(gVerbose || startVerbose) {
 		cerr << "Creating PatternSource: "; logTime(cerr, true);

@@ -1077,10 +1077,10 @@ bool GenomeHit<index_t>::combineWith(
     index_t rdlen = seq.length();
     int64_t remainsc = minsc - (_score - this_score) - (otherHit._score - other_score);
     if(remainsc > 0) remainsc = 0;
-    int read_gaps = 0, ref_gaps = 0;
+    int read_gaps = 0;
     if(spliced) {
         read_gaps = sc.maxReadGaps(remainsc + sc.canSpl(), rdlen);
-        ref_gaps = sc.maxRefGaps(remainsc + sc.canSpl(), rdlen);
+        //ref_gaps = sc.maxRefGaps(remainsc + sc.canSpl(), rdlen);
     }
     int this_ref_ext = read_gaps;
     if(spliced) this_ref_ext += (int)intronic_len;
@@ -2432,7 +2432,7 @@ public:
                 const EList<AlnRes> *rs[2] = {NULL, NULL};
                 sink.getUnp1(rs[0]); assert(rs[0] != NULL);
                 sink.getUnp2(rs[1]); assert(rs[1] != NULL);
-                index_t rs_size[2] = {rs[0]->size(), rs[1]->size()};
+                index_t rs_size[2] = {(index_t)rs[0]->size(), (index_t)rs[1]->size()};
                 for(index_t i = 0; i < 2; i++) {
                     for(index_t j = 0; j < rs_size[i]; j++) {
                         const AlnRes& res = (*rs[i])[j];

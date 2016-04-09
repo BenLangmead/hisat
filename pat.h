@@ -105,7 +105,8 @@ struct PatternParams {
 		bool fuzzy_,
 		int sampleLen_,
 		int sampleFreq_,
-		uint32_t skip_) :
+		uint32_t skip_,
+		int nthreads_) :
 		format(format_),
 		fileParallel(fileParallel_),
 		seed(seed_),
@@ -116,7 +117,8 @@ struct PatternParams {
 		fuzzy(fuzzy_),
 		sampleLen(sampleLen_),
 		sampleFreq(sampleFreq_),
-		skip(skip_) { }
+		skip(skip_),
+		nthreads(nthreads_) { }
 
 	int format;           // file format
 	bool fileParallel;    // true -> wrap files with separate PairedPatternSources
@@ -129,6 +131,7 @@ struct PatternParams {
 	int sampleLen;        // length of sampled reads for FastaContinuous...
 	int sampleFreq;       // frequency of sampled reads for FastaContinuous...
 	uint32_t skip;        // skip the first 'skip' patterns
+	int nthreads;         // number of threads for locking
 };
 
 /**
@@ -150,6 +153,9 @@ public:
 		useSpinlock_(p.useSpinlock),
 		mutex()
 	{
+#ifdef WITH_COHORTLOCK
+		mutex.reset_lock(p.nthreads);
+#endif
 	}
 
 	virtual ~PatternSource() { }
@@ -160,9 +166,8 @@ public:
 	 * whether locks will be contended.
 	 */
 	void addWrapper() {
-		lock();
+		ThreadSafe ts(&mutex, doLocking_);
 		numWrappers_++;
-		unlock();
 	}
 	
 	/**
@@ -224,24 +229,6 @@ public:
 	virtual void reset() { readCnt_ = 0; }
 
 	/**
-	 * Concrete subclasses call lock() to enter a critical region.
-	 * What constitutes a critical region depends on the subclass.
-	 */
-	void lock() {
-		if(!doLocking_) return; // no contention
-        mutex.lock();
-	}
-
-	/**
-	 * Concrete subclasses call unlock() to exit a critical region
-	 * What constitutes a critical region depends on the subclass.
-	 */
-	void unlock() {
-		if(!doLocking_) return; // no contention
-        mutex.unlock();
-	}
-
-	/**
 	 * Return a new dynamically allocated PatternSource for the given
 	 * format, using the given list of strings as the filenames to read
 	 * from or as the sequences themselves (i.e. if -c was used).
@@ -278,7 +265,13 @@ protected:
  */
 class PairedPatternSource {
 public:
-	PairedPatternSource(const PatternParams& p) : mutex_m(), seed_(p.seed) {}
+
+	PairedPatternSource(const PatternParams& p) : mutex_m(), seed_(p.seed) {
+#ifdef WITH_COHORTLOCK
+		mutex_m.reset_lock(p.nthreads);
+#endif
+	}
+
 	virtual ~PairedPatternSource() { }
 
 	virtual void addWrapper() = 0;
@@ -295,21 +288,6 @@ public:
 		bool fixName) = 0;
 	
 	virtual pair<TReadId, TReadId> readCnt() const = 0;
-
-	/**
-	 * Lock this PairedPatternSource, usually because one of its shared
-	 * fields is being updated.
-	 */
-	void lock() {
-		mutex_m.lock();
-	}
-
-	/**
-	 * Unlock this PairedPatternSource.
-	 */
-	void unlock() {
-		mutex_m.unlock();
-	}
 
 	/**
 	 * Given the values for all of the various arguments used to specify
@@ -887,7 +865,7 @@ public:
 		bool& done)
 	{
 		// We'll be manipulating our file handle/filecur_ state
-		lock();
+		ThreadSafe ts(&mutex, doLocking_);
 		while(true) {
 			do { read(r, rdid, endid, success, done); }
 			while(!success && !done);
@@ -901,8 +879,6 @@ public:
 			break;
 		}
 		assert(r.repOk());
-		// Leaving critical region
-		unlock();
 		return success;
 	}
 	
@@ -919,7 +895,7 @@ public:
 		bool& paired)
 	{
 		// We'll be manipulating our file handle/filecur_ state
-		lock();
+		ThreadSafe ts(&mutex, doLocking_);
 		while(true) {
 			do { readPair(ra, rb, rdid, endid, success, done, paired); }
 			while(!success && !done);
@@ -934,8 +910,6 @@ public:
 		}
 		assert(ra.repOk());
 		assert(rb.repOk());
-		// Leaving critical region
-		unlock();
 		return success;
 	}
 	

@@ -333,8 +333,6 @@ enum {
 	SA_ACTION_TYPE_EDIT         // 6
 };
 
-#define MIN(x, y) ((x < y) ? x : y)
-
 #ifdef ALIGNER_SEED_MAIN
 
 #include <getopt.h>
