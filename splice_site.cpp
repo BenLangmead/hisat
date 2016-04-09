@@ -224,7 +224,7 @@ bool SpliceSiteDB::addSpliceSite(
                     if(leftAnchorLen >= minLeftAnchorLen && rightAnchorLen >= minRightAnchorLen) {
                         bool added = false;
                         assert_lt(ref, _mutex.size());
-                        ThreadSafe t(_mutex[ref], _threadSafe && _write);
+                        ThreadSafe t(&_mutex[ref], _threadSafe && _write);
                         assert_lt(ref, _fwIndex.size());
                         assert(_fwIndex[ref] != NULL);
                         Node *cur = _fwIndex[ref]->add(pool(ref), ssp, &added);
@@ -288,7 +288,7 @@ bool SpliceSiteDB::addSpliceSite(
         if(leftAnchorLen >= minLeftAnchorLen && rightAnchorLen >= minRightAnchorLen) {
             bool added = false;
             assert_lt(ref, _mutex.size());
-            ThreadSafe t(_mutex[ref], _threadSafe && _write);
+            ThreadSafe t(&_mutex[ref], _threadSafe && _write);
             assert_lt(ref, _fwIndex.size());
             assert(_fwIndex[ref] != NULL);
             Node *cur = _fwIndex[ref]->add(pool(ref), ssp, &added);
