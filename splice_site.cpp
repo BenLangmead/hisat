@@ -161,7 +161,7 @@ size_t SpliceSiteDB::size(uint64_t ref) const {
     assert_lt(ref, _mutex.size());
     assert_lt(ref, _fwIndex.size());
     assert_eq(_fwIndex.size(), _bwIndex.size());
-    ThreadSafe t(const_cast<MUTEX_T*>(&_mutex[ref]), _threadSafe && _write);
+    ThreadSafe t(&_mutex[ref], _threadSafe && _write);
     return _fwIndex.size();
 }
 
@@ -339,7 +339,7 @@ bool SpliceSiteDB::getSpliceSite(SpliceSite& ss) const
     uint64_t ref = ss.ref();
     assert_lt(ref, _numRefs);
     assert_lt(ref, _mutex.size());
-    ThreadSafe t(const_cast<MUTEX_T*>(&_mutex[ref]), _threadSafe && _write);
+    ThreadSafe t(&_mutex[ref], _threadSafe && _write);
     
     assert_lt(ref, _fwIndex.size());
     assert(_fwIndex[ref] != NULL);
@@ -357,7 +357,7 @@ void SpliceSiteDB::getLeftSpliceSites(uint32_t ref, uint32_t left, uint32_t rang
     
     assert_lt(ref, _numRefs);
     assert_lt(ref, _mutex.size());
-    ThreadSafe t(const_cast<MUTEX_T*>(&_mutex[ref]), _threadSafe && _write);
+    ThreadSafe t(&_mutex[ref], _threadSafe && _write);
     assert_gt(range, 0);
     assert_geq(left + 1, range);
     assert_lt(ref, _bwIndex.size());
@@ -372,7 +372,7 @@ void SpliceSiteDB::getRightSpliceSites(uint32_t ref, uint32_t right, uint32_t ra
     
     assert_lt(ref, _numRefs);
     assert_lt(ref, _mutex.size());
-    ThreadSafe t(const_cast<MUTEX_T*>(&_mutex[ref]), _threadSafe && _write);
+    ThreadSafe t(&_mutex[ref], _threadSafe && _write);
     assert_gt(range, 0);
     assert_gt(right + range, range);
     assert_lt(ref, _fwIndex.size());
@@ -431,7 +431,7 @@ bool SpliceSiteDB::hasSpliceSites(
     
     assert_lt(ref, _numRefs);
     assert_lt(ref, _mutex.size());
-    ThreadSafe t(const_cast<MUTEX_T*>(&_mutex[ref]), _threadSafe && _write);
+    ThreadSafe t(&_mutex[ref], _threadSafe && _write);
     
     assert_lt(left1, right1);
     assert_lt(ref, _bwIndex.size());
