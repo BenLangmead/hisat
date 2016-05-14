@@ -326,7 +326,7 @@ hisat-align-s: hisat.cpp $(SEARCH_CPPS) $(SHARED_CPPS) $(HEADERS) $(SEARCH_FRAGM
 	$(LIBS) $(SRA_LIB) $(SEARCH_LIBS)
 
 hisat-align-l: hisat.cpp $(SEARCH_CPPS) $(SHARED_CPPS) $(HEADERS) $(SEARCH_FRAGMENTS)
-	$(CXX) $(RELEASE_FLAGS) $(EXTRA_FLAGS)$(RELEASE_DEFS) \
+	$(CXX) $(RELEASE_FLAGS) $(EXTRA_FLAGS) $(RELEASE_DEFS) \
 	$(DEFS) $(SRA_DEF) -DBOWTIE2 -DBOWTIE_64BIT_INDEX $(NOASSERT_FLAGS) -Wall \
 	$(INC) $(SEARCH_INC) \
 	-o $@ $< \
@@ -474,4 +474,3 @@ clean:
 .PHONY: push-doc
 push-doc: doc/manual.inc.html
 	scp doc/*.*html igm1:/data1/igm3/www/ccb.jhu.edu/html/software/hisat/
-	
