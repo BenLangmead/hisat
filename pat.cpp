@@ -1646,7 +1646,7 @@ static void SRA_IO_Worker(void *vp)
         while(sra_data->isFull()) {
 #if defined(_TTHREAD_WIN32_)
             Sleep(1);
-#elif defined(_TTHREAD_POSIX_)
+#else
             const static timespec ts = {0, 1000000};  // 1 millisecond
             nanosleep(&ts, NULL);
 #endif
@@ -1756,7 +1756,7 @@ bool SRAPatternSource::readPair(
         
 #if defined(_TTHREAD_WIN32_)
         Sleep(1);
-#elif defined(_TTHREAD_POSIX_)
+#else
         const static timespec ts = {0, 1000000}; // 1 millisecond
         nanosleep(&ts, NULL);
 #endif

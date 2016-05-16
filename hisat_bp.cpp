@@ -2994,8 +2994,9 @@ static void multiseedSearchWorker_hisat_bp(void *vp) {
                 if(min_rdid + thread_rids_mindist < rdid) {
 #if defined(_TTHREAD_WIN32_)
                     Sleep(0);
-#elif defined(_TTHREAD_POSIX_)
-                    sched_yield();
+#else
+		    const static timespec ts = {0, 1000000};  // 1 millisecond
+                    nanosleep(&ts, NULL);
 #endif
                 } else break;
             }
