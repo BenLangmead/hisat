@@ -84,8 +84,6 @@ public:
     }
 	
     ThreadSafe(MUTEX_T* ptr_mutex, bool locked = true) {
-	        //set for no-io mode
-	        locked = false;
 		if(locked) {
 #if WITH_TBB && NO_SPINLOCK && WITH_QUEUELOCK
 		    //have to use the heap as we can't copy
