@@ -53,7 +53,7 @@
 #include "simple_func.h"
 #include "presets.h"
 #include "opts.h"
-#include "outq.h"
+#include "mock_outq.h"
 #include "aligner_seed2.h"
 
 using namespace std;
@@ -1566,7 +1566,9 @@ static const char *argv0 = NULL;
 static PatternSourcePerThreadFactory*
 createPatsrcFactory(PairedPatternSource& _patsrc, int tid) {
 	PatternSourcePerThreadFactory *patsrcFact;
-	patsrcFact = new WrappedPatternSourcePerThreadFactory(_patsrc);
+	//patsrcFact = new WrappedPatternSourcePerThreadFactory(_patsrc);
+	bool paired = !mates2.empty();
+	patsrcFact = new MemoryMockPatternSourcePerThreadFactory(_patsrc, tid, seed, paired);
 	assert(patsrcFact != NULL);
 	return patsrcFact;
 }

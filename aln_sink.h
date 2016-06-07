@@ -26,7 +26,7 @@
 #include "sam.h"
 #include "ds.h"
 #include "simple_func.h"
-#include "outq.h"
+#include "mock_outq.h"
 #include <utility>
 #include "splice_site.h"
 
@@ -599,7 +599,7 @@ class AlnSink {
 public:
 
 	explicit AlnSink(
-		OutputQueue& oq,
+		MockOutputQueue& oq,
 		const StrList& refnames,
 		bool quiet,
         SpliceSiteDB* ssdb = NULL) :
@@ -863,13 +863,13 @@ public:
 	/**
 	 * Return mutable reference to the shared OutputQueue.
 	 */
-	OutputQueue& outq() {
+	MockOutputQueue& outq() {
 		return oq_;
 	}
 
 protected:
 
-	OutputQueue&       oq_;           // output queue
+	MockOutputQueue&       oq_;           // output queue
 	int                numWrappers_;  // # threads owning a wrapper for this HitSink
 	const StrList&     refnames_;     // reference names
 	bool               quiet_;        // true -> don't print alignment stats at the end
@@ -1342,7 +1342,7 @@ class AlnSinkSam : public AlnSink<index_t> {
 public:
 
 	AlnSinkSam(
-		OutputQueue&     oq,           // output queue
+		MockOutputQueue&     oq,           // output queue
 		const SamConfig& samc,         // settings & routines for SAM output
 		const StrList&   refnames,     // reference names
 		bool             quiet,        // don't print alignment summary at end
@@ -1775,7 +1775,7 @@ void AlnSinkWrap<index_t>::finishRead(
 									  bool suppressAlignments)         // = false
 {
 	obuf_.clear();
-	OutputQueueMark qqm(g_.outq(), obuf_, rdid_, threadid_);
+	MockOutputQueueMark qqm(g_.outq(), obuf_, rdid_, threadid_);
 	assert(init_);
 	if(!suppressSeedSummary) {
 		if(sr1 != NULL) {
