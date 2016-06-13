@@ -1731,6 +1731,8 @@ static void parseOptions(int argc, const char **argv) {
 			 << endl;
 	}
 #endif
+	// CW: important change for no-io (from bowtie no-io)
+	qUpto /= nthreads;
 }
 
 static const char *argv0 = NULL;
