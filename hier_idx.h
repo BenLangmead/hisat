@@ -47,6 +47,7 @@ public:
 			  full_index_t& localOffset,
 			  bool switchEndian,
 			  size_t& bytesRead,
+			  size_t& bytesRead2,
 			  int color,
 			  int needEntireReverse,
 			  bool fw,
@@ -96,6 +97,7 @@ public:
 					   localOffset,
 					   switchEndian,
 					   bytesRead,
+					   bytesRead2,
 					   color,
 					   needEntireReverse,
 					   loadSASamp,
@@ -255,7 +257,8 @@ public:
 						full_index_t& tidx,
 						full_index_t& localOffset,
 						bool switchEndian,
-						size_t bytesRead,
+						size_t& bytesRead,
+						size_t& bytesRead2,
 						int color,
 						int needEntireRev, 
 						bool loadSASamp, 
@@ -639,7 +642,8 @@ void LocalEbwt<index_t, full_index_t>::readIntoMemory(
 										full_index_t& tidx,
 										full_index_t& localOffset,
 										bool switchEndian,
-										size_t bytesRead,
+										size_t& bytesRead,
+										size_t& bytesRead2,
 										int color,
 										int entireRev,
 										bool loadSASamp,
@@ -955,7 +959,6 @@ void LocalEbwt<index_t, full_index_t>::readIntoMemory(
 	
 	this->_offs.reset();
 	if(loadSASamp) {
-		bytesRead = 4; // reset for secondary index file (already read 1-sentinel)		
 		shmemLeader = true;
 		if(this->_verbose || startVerbose) {
 			cerr << "Reading offs (" << offsLenSampled << " " << std::setw(2) << sizeof(index_t)*8 << "-bit words): ";
@@ -1016,8 +1019,8 @@ void LocalEbwt<index_t, full_index_t>::readIntoMemory(
 				} else {
 					if(this->_useMm) {
 #ifdef BOWTIE_MM
-						this->_offs.init((index_t*)(mmFile[1] + bytesRead), offsLen, false);
-						bytesRead += (offsLen * sizeof(index_t));
+						this->_offs.init((index_t*)(mmFile[1] + bytesRead2), offsLen, false);
+						bytesRead2 += (offsLen * sizeof(index_t));
 						fseek(in6, (offsLen * sizeof(index_t)), SEEK_CUR);
 #endif
 					} else {
@@ -1778,7 +1781,7 @@ void HierEbwt<index_t, local_index_t>::readIntoMemory(
 	}
 	
 	// Read endianness hints from both streams
-	size_t bytesRead = 0;
+	size_t bytesRead = 0, bytesRead2 = 4;
 	switchEndian = false;
 	uint32_t one = readU32(_in5, switchEndian); // 1st word of primary stream
 	bytesRead += 4;
@@ -1836,6 +1839,7 @@ void HierEbwt<index_t, local_index_t>::readIntoMemory(
                                                                                              localOffset,
                                                                                              switchEndian,
                                                                                              bytesRead,
+											     bytesRead2,
                                                                                              color,
                                                                                              needEntireRev,
                                                                                              this->fw_,
