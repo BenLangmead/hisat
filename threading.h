@@ -72,6 +72,12 @@
 # endif
 #endif /* NO_SPINLOCK */
 
+#ifdef WITH_TBB
+struct thread_tracking_pair {
+	int tid;
+	tbb::atomic<int>* done;
+};
+#endif
 
 /**
  * Wrap a lock; obtain lock upon construction, release upon destruction.

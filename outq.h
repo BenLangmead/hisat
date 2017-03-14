@@ -56,10 +56,43 @@ public:
 		finished_(RES_CAT),
 		reorder_(reorder),
 		threadSafe_(threadSafe),
+		nthreads_(nthreads),
         mutex_m()
 	{
-		assert(nthreads <= 1 || threadSafe);
+		assert(nthreads_ <= 1 || threadSafe);
+		if(!reorder)
+		{
+			perThreadBuf = new BTString*[nthreads_];
+			perThreadCounter = new int[nthreads_];
+			size_t i = 0;
+			for(i=0;i<nthreads_;i++)
+			{
+				perThreadBuf[i] = new BTString[perThreadBufSize];
+				perThreadCounter[i] = 0;
+			}
+		}
 	}
+
+	~OutputQueue() {
+		if(reorder_)
+			return;
+		size_t i = 0;
+		int j = 0;
+		for(i=0;i<nthreads_;i++)
+		{
+			if(perThreadCounter[i] > 0)
+			{
+				for(j=0;j<perThreadCounter[i];j++)
+				{
+					obuf_.writeString(perThreadBuf[i][j]);
+					nfinished_++;
+					nflushed_++;
+				}
+			}
+		}
+	}
+			
+		
 
 	/**
 	 * Caller is telling us that they're about to write output record(s) for
@@ -118,6 +151,11 @@ protected:
 	bool            reorder_;
 	bool            threadSafe_;
 	MUTEX_T         mutex_m;
+	
+	size_t nthreads_;
+	BTString**	perThreadBuf;
+	int* 		perThreadCounter;
+	static const int perThreadBufSize = 32;
 };
 
 class OutputQueueMark {

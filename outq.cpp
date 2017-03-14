@@ -49,8 +49,8 @@ void OutputQueue::beginRead(TReadId rdid, size_t threadId) {
  * Writer is finished writing to 
  */
 void OutputQueue::finishRead(const BTString& rec, TReadId rdid, size_t threadId) {
-	ThreadSafe t(&mutex_m, threadSafe_);
 	if(reorder_) {
+		ThreadSafe t(&mutex_m, threadSafe_);
 		assert_geq(rdid, cur_);
 		assert_eq(lines_.size(), finished_.size());
 		assert_eq(lines_.size(), started_.size());
@@ -63,9 +63,20 @@ void OutputQueue::finishRead(const BTString& rec, TReadId rdid, size_t threadId)
 		flush(false, false); // don't force; already have lock
 	} else {
 		// obuf_ is the OutFileBuf for the output file
-		obuf_.writeString(rec);
-		nfinished_++;
-		nflushed_++;
+		if(perThreadCounter[threadId] >= perThreadBufSize)
+		{
+			int i = 0;
+			for(i=0; i < perThreadBufSize; i++)
+			{
+				ThreadSafe t(&mutex_m, threadSafe_);
+				obuf_.writeString(perThreadBuf[threadId][i]);
+				//turn these into atomics
+				nfinished_++;
+				nflushed_++;
+			}
+			perThreadCounter[threadId] = 0;
+		}
+		perThreadBuf[threadId][perThreadCounter[threadId]++] = rec;
 	}
 }
 

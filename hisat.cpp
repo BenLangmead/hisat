@@ -27,6 +27,7 @@
 #include <math.h>
 #include <utility>
 #include <limits>
+#include <time.h>
 #include "alphabet.h"
 #include "assert_helpers.h"
 #include "endian_swap.h"
@@ -58,6 +59,9 @@
 #include "opts.h"
 #include "outq.h"
 #include "aligner_seed2.h"
+#ifdef WITH_TBB
+ #include <tbb/compat/thread>
+#endif
 
 #ifdef WITH_TBB
 
@@ -65,12 +69,14 @@
 #include <tbb/task_group.h>
 
 class multiseedSearchWorker_hisat {
+	thread_tracking_pair *p;
 	int tid;
 
 public:
-	multiseedSearchWorker_hisat(const multiseedSearchWorker_hisat& W): tid(W.tid) {};
+	//multiseedSearchWorker_hisat(const multiseedSearchWorker_hisat& W): tid(W.tid) {};
+	multiseedSearchWorker_hisat(void *vp) { p = (thread_tracking_pair*) vp; tid = p->tid; }
 	multiseedSearchWorker_hisat(int id):tid(id) {};
-	void operator()() const;
+	//void operator()() const;
 };
 
 #endif /* WITH_TBB */
@@ -2911,7 +2917,10 @@ void get_cpu_and_node(int& cpu, int& node) {
  * -
  */
 #ifdef WITH_TBB
-void multiseedSearchWorker_hisat::operator()() const {
+//void multiseedSearchWorker_hisat::operator()() const {
+static void multiseedSearchWorker_hisat(void *vp) {
+	thread_tracking_pair *p = (thread_tracking_pair*) vp;
+	int tid = p->tid;
 #else
 static void multiseedSearchWorker_hisat(void *vp) {
     int tid = *((int*)vp);
@@ -3443,6 +3452,10 @@ static void multiseedSearchWorker_hisat(void *vp) {
 	std::cout << ss.str();
 #endif
 
+#ifdef WITH_TBB
+	p->done->fetch_and_add(1);
+#endif
+
 	return;
 }
 
@@ -3470,7 +3483,8 @@ static void multiseedSearch(
 	multiseed_metricsOfb      = metricsOfb;
 	multiseed_refs = refs;
 #ifdef WITH_TBB
-	tbb::task_group tbb_grp;
+	//tbb::task_group tbb_grp;
+	AutoArray<std::thread*> threads(nthreads+1);
 #else
 	AutoArray<tthread::thread*> threads(nthreads);
 	AutoArray<int> tids(nthreads);
@@ -3506,30 +3520,40 @@ static void multiseedSearch(
 	}
 #endif
 	// Start the metrics thread
+#ifdef WITH_TBB
+	tbb::atomic<int> all_threads_done;
+	all_threads_done = 0;
+#endif
 	{
 		Timer _t(cerr, "Multiseed full-index search: ", timing);
+		int mil = 10;
+		struct timespec ts = {0};
+		ts.tv_sec=0;
+		ts.tv_nsec = mil * 1000000L;
         
-        thread_rids.resize(nthreads);
-        thread_rids.fill(0);
-        thread_rids_mindist = (nthreads == 1 || !useTempSpliceSite ? 0 : 1000 * nthreads);
+		thread_rids.resize(nthreads);
+		thread_rids.fill(0);
+		thread_rids_mindist = (nthreads == 1 || !useTempSpliceSite ? 0 : 1000 * nthreads);
 
 		for(int i = 0; i < nthreads; i++) {
 #ifdef WITH_TBB
-            tbb_grp.run(multiseedSearchWorker_hisat(i+1));
+		    //tbb_grp.run(multiseedSearchWorker_hisat(i+1));
+			thread_tracking_pair tp;
+			tp.tid = i;
+			tp.done = &all_threads_done;
+			threads[i] = new std::thread(multiseedSearchWorker_hisat, (void*) &tp);
+			threads[i]->detach();
+			nanosleep(&ts, (struct timespec *) NULL);
+		}
+		while(all_threads_done < nthreads);
 #else
 			// Thread IDs start at 1
 			tids[i] = i+1;
-            threads[i] = new tthread::thread(multiseedSearchWorker_hisat, (void*)&tids[i]);
-#endif
+			threads[i] = new tthread::thread(multiseedSearchWorker_hisat, (void*)&tids[i]);
 		}
-
-#ifdef WITH_TBB
-        tbb_grp.wait();
-#else
-        for (int i = 0; i < nthreads; i++)
-            threads[i]->join();
+		for (int i = 0; i < nthreads; i++)
+			threads[i]->join();
 #endif
-
 	}
 	if(!metricsPerRead && (metricsOfb != NULL || metricsStderr)) {
 		metrics.reportInterval(metricsOfb, metricsStderr, true, false, NULL);
