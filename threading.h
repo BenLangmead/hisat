@@ -29,6 +29,7 @@
 # include <tbb/mutex.h>
 # include <tbb/spin_mutex.h>
 # include <tbb/queuing_mutex.h>
+# include <tbb/atomic.h>
 # ifdef WITH_AFFINITY
 #  ifdef WITH_COHORTLOCK
 #   include "tkt.hpp"
@@ -38,7 +39,6 @@
 #  include <sched.h>
 #  include <tbb/task_group.h>
 #  include <tbb/task_scheduler_observer.h>
-#  include <tbb/atomic.h>
 #  include <tbb/task_scheduler_init.h>
 # endif
 #else

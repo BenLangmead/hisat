@@ -48,7 +48,6 @@ public:
 		TReadId rdid = 0) :
 		obuf_(obuf),
 		cur_(rdid),
-		nstarted_(0),
 		nfinished_(0),
 		nflushed_(0),
 		lines_(RES_CAT),
@@ -59,6 +58,7 @@ public:
 		nthreads_(nthreads),
         mutex_m()
 	{
+		nstarted_=0;
 		assert(nthreads_ <= 1 || threadSafe);
 		if(!reorder)
 		{
@@ -73,24 +73,7 @@ public:
 		}
 	}
 
-	~OutputQueue() {
-		if(reorder_)
-			return;
-		size_t i = 0;
-		int j = 0;
-		for(i=0;i<nthreads_;i++)
-		{
-			if(perThreadCounter[i] > 0)
-			{
-				for(j=0;j<perThreadCounter[i];j++)
-				{
-					obuf_.writeString(perThreadBuf[i][j]);
-					nfinished_++;
-					nflushed_++;
-				}
-			}
-		}
-	}
+	~OutputQueue() { }
 			
 		
 
@@ -142,7 +125,8 @@ protected:
 
 	OutFileBuf&     obuf_;
 	TReadId         cur_;
-	TReadId         nstarted_;
+	//TReadId         nstarted_;
+	tbb::atomic<TReadId> nstarted_;
 	TReadId         nfinished_;
 	TReadId         nflushed_;
 	EList<BTString> lines_;
