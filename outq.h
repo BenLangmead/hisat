@@ -125,8 +125,11 @@ protected:
 
 	OutFileBuf&     obuf_;
 	TReadId         cur_;
-	//TReadId         nstarted_;
+#ifdef WITH_TBB
 	tbb::atomic<TReadId> nstarted_;
+#else
+	TReadId         nstarted_;
+#endif
 	TReadId         nfinished_;
 	TReadId         nflushed_;
 	EList<BTString> lines_;

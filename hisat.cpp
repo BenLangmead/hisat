@@ -3115,7 +3115,10 @@ static void multiseedSearchWorker_hisat(void *vp) {
 			rnd.init(ROTL(ps->read_a().seed, 2));
 			sample = rnd.nextFloat() < sampleFrac;
 		}
-		if(rdid >= skipReads && rdid < qUpto && sample) {
+		//if(rdid >= skipReads && rdid < qUpto && sample) {
+		//this could be <= nthreads off the true number, this is acceptable
+		size_t num_reads_aligned = patsrc.get_total_read_count();
+		if(num_reads_aligned >= skipReads && num_reads_aligned < qUpto && sample) {
 			// Align this read/pair
 			bool retry = true;
 			//
@@ -3428,9 +3431,14 @@ static void multiseedSearchWorker_hisat(void *vp) {
                     thread_rids[tid - 1] = rdid;
                 }
 			} // while(retry)
+			patsrc.update_total_read_count(1);
 		} // if(rdid >= skipReads && rdid < qUpto)
-		else if(rdid >= qUpto) {
+		//else if(rdid >= qUpto) {
+		else if(num_reads_aligned >= qUpto) {
 			break;
+		}
+		else if(num_reads_aligned < skipReads) {
+			patsrc.update_total_read_count(1);
 		}
 		if(metricsPerRead) {
 			MERGE_METRICS(metricsPt, nthreads > 1);

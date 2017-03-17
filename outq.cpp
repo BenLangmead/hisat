@@ -27,7 +27,11 @@ void OutputQueue::beginRead(TReadId rdid, size_t threadId) {
 	//nstarted_++;
 	if(reorder_) {
 		ThreadSafe t(&mutex_m, threadSafe_);
+#ifdef WITH_TBB
 		nstarted_.fetch_and_add(1);
+#else
+		nstarted_++;
+#endif
 		assert_geq(rdid, cur_);
 		assert_eq(lines_.size(), finished_.size());
 		assert_eq(lines_.size(), started_.size());
@@ -46,7 +50,11 @@ void OutputQueue::beginRead(TReadId rdid, size_t threadId) {
 	}
 	else
 	{
+#ifdef WITH_TBB
 		nstarted_.fetch_and_add(1);
+#else
+		nstarted_++;
+#endif
 	}
 }
 
