@@ -139,7 +139,7 @@ protected:
 	size_t nthreads_;
 	BTString**	perThreadBuf;
 	int* 		perThreadCounter;
-	static const int perThreadBufSize = 32;
+	static const int perThreadBufSize = 128;
 };
 
 class OutputQueueMark {
