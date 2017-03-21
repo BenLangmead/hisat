@@ -27,6 +27,10 @@
 #include "filebuf.h"
 #include "formats.h"
 
+#ifdef WITH_TBB
+	#include "tbb/atomic.h"
+#endif
+
 #ifdef USE_SRA
 
 #include "tinythread.h"
@@ -287,8 +291,13 @@ pair<bool, int> DualPatternComposer::nextBatch(PerThreadReadBuf& pt) {
 
 size_t PatternComposer::update_total_read_count(size_t read_count) {
 		// could use an atomic here, but going with locking for portability
+		//
+#ifdef WITH_TBB
+		total_read_count.fetch_and_add(read_count);
+#else
 		ThreadSafe ts(&mutex_m2); 
-		total_read_count+=read_count; 
+		total_read_count+=read_count;
+#endif
 		return total_read_count;
 	}
 

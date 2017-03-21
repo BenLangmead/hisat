@@ -966,10 +966,15 @@ private:
  */
 class PatternComposer {
 public:
-	PatternComposer(const PatternParams& p) : seed_(p.seed), mutex_m(), total_read_count(0)
+	PatternComposer(const PatternParams& p) : seed_(p.seed), mutex_m()
 	{
 #ifdef WITH_COHORTLOCK
 		mutex_m.reset_lock(p.nthreads);
+#endif
+#ifdef WITH_TBB
+		total_read_count.fetch_and_store(0);
+#else
+		total_read_count=0;
 #endif
 	}
 	
@@ -1027,7 +1032,13 @@ protected:
 	MUTEX_T mutex_m2;
 	
 	/// Number of reads read in from PatternSources	
+	
+#ifdef WITH_TBB
+	tbb::atomic<size_t> total_read_count;
+#else
 	volatile size_t total_read_count;
+#endif
+
 };
 
 /**
