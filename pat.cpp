@@ -162,6 +162,7 @@ pair<bool, bool> PatternSourcePerThread::nextReadPair() {
 			return make_pair(false, true);
 		}
 		last_batch_ = res.first;
+		//this is either # of reads or # of bytes depending on the parser
 		last_batch_size_ = res.second;
 		assert_eq(0, buf_.cur_buf_);
 	} else {
@@ -258,8 +259,6 @@ pair<bool, int> DualPatternComposer::nextBatch(PerThreadReadBuf& pt) {
 					false); // don't grab lock below
 				assert_eq((*srca_)[cur]->readCount(),
 				          (*srcb_)[cur]->readCount());
-				/*assert_eq((*srca_)[cur]->byteCount(),
-				          (*srcb_)[cur]->byteCount());*/
 			}
 			if(resa.second < resb.second) {
 				cerr << "Error, fewer reads in file specified with -1 "
@@ -817,9 +816,6 @@ pair<bool, int> FastaPatternSource::nextBatchFromFile(
 	return make_pair(done, readi);
 }
 
-/**
- * Finalize FASTA parsing outside critical section.
- */
 bool FastaPatternSource::parse(Read& r, Read& rb, TReadId rdid) const {
 	// We assume the light parser has put the raw data for the separate ends
 	// into separate Read objects.  That doesn't have to be the case, but
@@ -1163,52 +1159,37 @@ bool FastqPatternSource::parse(Read &r, Read& rb, TReadId rdid) const {
 	while(cur < buflen && (c == '\n' || c == '\r')) {
 		c = r.readOrigRawBuf[cur++];
 	}
-	
+
 	assert(r.qual.empty());
-	if(nchar > 0) {
-		int nqual = 0;
-		if (intQuals_) {
-			int cur_int = 0;
-			while(cur < buflen && c != '\t' && c != '\n' && c != '\r') {
-				cur_int *= 10;
-				cur_int += (int)(c - '0');
-				c = r.readOrigRawBuf[cur++];
-				if(c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-					char cadd = intToPhred33(cur_int, solQuals_);
-					cur_int = 0;
-					assert_geq(cadd, 33);
-					if(++nqual > gTrim5) {
-						r.qual.append(cadd);
-					}
-				}
+	int nqual = 0;
+	if (intQuals_) {
+		throw 1; // not yet implemented
+	} else {
+		c = charToPhred33(c, solQuals_, phred64Quals_);
+		if(nqual++ >= r.trimmed5) {
+			r.qual.append(c);
+		}
+		while(cur < buflen) {
+			c = r.readOrigRawBuf[cur++];
+			if (c == ' ') {
+				wrongQualityFormat(r.name);
+				return false;
 			}
-		} else {
+			if(c == '\r' || c == '\n') {
+				break;
+			}
 			c = charToPhred33(c, solQuals_, phred64Quals_);
 			if(nqual++ >= r.trimmed5) {
 				r.qual.append(c);
 			}
-			while(cur < buflen) {
-				c = r.readOrigRawBuf[cur++];
-				if (c == ' ') {
-					wrongQualityFormat(r.name);
-					return false;
-				}
-				if(c == '\r' || c == '\n') {
-					break;
-				}
-				c = charToPhred33(c, solQuals_, phred64Quals_);
-				if(nqual++ >= r.trimmed5) {
-					r.qual.append(c);
-				}
-			}
-			r.qual.trimEnd(r.trimmed3);
-			if(r.qual.length() < r.patFw.length()) {
-				tooFewQualities(r.name);
-				return false;
-			} else if(r.qual.length() > r.patFw.length()) {
-				tooManyQualities(r.name);
-				return false;
-			}
+		}
+		r.qual.trimEnd(r.trimmed3);
+		if(r.qual.length() < r.patFw.length()) {
+			tooFewQualities(r.name);
+			return false;
+		} else if(r.qual.length() > r.patFw.length()) {
+			tooManyQualities(r.name);
+			return false;
 		}
 	}
 	// Set up a default name if one hasn't been set
