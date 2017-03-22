@@ -76,10 +76,10 @@ void OutputQueue::finishRead(const BTString& rec, TReadId rdid, size_t threadId)
 		flush(false, false); // don't force; already have lock
 	} else {
 		// obuf_ is the OutFileBuf for the output file
-		if(perThreadCounter[threadId] >= perThreadBufSize)
+		if(perThreadCounter[threadId] >= perThreadBufSize_)
 		{
 			int i = 0;
-			for(i=0; i < perThreadBufSize; i++)
+			for(i=0; i < perThreadBufSize_; i++)
 			{
 				ThreadSafe t(&mutex_m, threadSafe_);
 				obuf_.writeString(perThreadBuf[threadId][i]);

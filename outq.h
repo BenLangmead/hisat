@@ -45,6 +45,7 @@ public:
 		bool reorder,
 		size_t nthreads,
 		bool threadSafe,
+		int perThreadBufSize,
 		TReadId rdid = 0) :
 		obuf_(obuf),
 		cur_(rdid),
@@ -56,18 +57,20 @@ public:
 		reorder_(reorder),
 		threadSafe_(threadSafe),
 		nthreads_(nthreads),
-        mutex_m()
+        mutex_m(),
+	perThreadBufSize_(perThreadBufSize)
 	{
 		nstarted_=0;
 		assert(nthreads_ <= 1 || threadSafe);
 		if(!reorder)
 		{
+			fprintf(stderr,"perThreadBufSize for output is %d\n",perThreadBufSize_);
 			perThreadBuf = new BTString*[nthreads_];
 			perThreadCounter = new int[nthreads_];
 			size_t i = 0;
 			for(i=0;i<nthreads_;i++)
 			{
-				perThreadBuf[i] = new BTString[perThreadBufSize];
+				perThreadBuf[i] = new BTString[perThreadBufSize_];
 				perThreadCounter[i] = 0;
 			}
 		}
@@ -142,7 +145,7 @@ protected:
 	size_t nthreads_;
 	BTString**	perThreadBuf;
 	int* 		perThreadCounter;
-	static const int perThreadBufSize = 128;
+	int perThreadBufSize_;
 };
 
 class OutputQueueMark {
