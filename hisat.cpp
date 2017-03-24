@@ -118,7 +118,7 @@ static uint32_t mhits;    // don't report any hits if there are > mhits
 static int partitionSz;   // output a partitioning key in first field
 static bool useSpinlock;  // false -> don't use of spinlocks even if they're #defines
 static int readsPerBatch; // # reads to read from input file at once
-static int readsPerBatchOutput;
+static int readsPerBatchOutput; // # reads to hold for output
 static bool fileParallel; // separate threads read separate input files in parallel
 static bool useShmem;     // use shared memory to hold the index
 static bool useMm;        // use memory-mapped files to hold the index
@@ -3121,10 +3121,7 @@ static void multiseedSearchWorker_hisat(void *vp) {
 			rnd.init(ROTL(ps->read_a().seed, 2));
 			sample = rnd.nextFloat() < sampleFrac;
 		}
-		//if(rdid >= skipReads && rdid < qUpto && sample) {
-		//this could be <= nthreads off the true number, this is acceptable
-		size_t num_reads_aligned = patsrc.get_total_read_count();
-		if(num_reads_aligned >= skipReads && num_reads_aligned < qUpto && sample) {
+		if(rdid >= skipReads && rdid < qUpto && sample) {
 			// Align this read/pair
 			bool retry = true;
 			//
@@ -3437,14 +3434,9 @@ static void multiseedSearchWorker_hisat(void *vp) {
                     thread_rids[tid - 1] = rdid;
                 }
 			} // while(retry)
-			patsrc.update_total_read_count(1);
 		} // if(rdid >= skipReads && rdid < qUpto)
-		//else if(rdid >= qUpto) {
-		else if(num_reads_aligned >= qUpto) {
+		else if(rdid >= qUpto) {
 			break;
-		}
-		else if(num_reads_aligned < skipReads) {
-			patsrc.update_total_read_count(1);
 		}
 		if(metricsPerRead) {
 			MERGE_METRICS(metricsPt, nthreads > 1);
@@ -3717,8 +3709,8 @@ static void driver(
 		reorder && nthreads > 1, // whether to reorder when there's >1 thread
 		nthreads,                // # threads
 		nthreads > 1,            // whether to be thread-safe
-		readsPerBatchOutput,
-		skipReads);		// first read will have this rdid
+		readsPerBatchOutput,	 // # of reads to hold in out buffer
+		skipReads);              // first read will have this rdid
 	{
 		Timer _t(cerr, "Time searching: ", timing);
 		// Set up penalities

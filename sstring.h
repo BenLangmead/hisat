@@ -1691,11 +1691,11 @@ public:
 	 */
 	virtual ~SStringExpandable() {
 		if(cs_ != NULL) {
-			//delete[] cs_;
+			delete[] cs_;
 			cs_ = NULL;
 		}
 		if(printcs_ != NULL) {
-			//delete[] printcs_;
+			delete[] printcs_;
 			printcs_ = NULL;
 		}
 		sz_ = len_ = 0;

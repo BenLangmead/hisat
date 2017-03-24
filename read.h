@@ -64,7 +64,6 @@ struct Read {
 		name.clear();
 		filter = '?';
 		seed = 0;
-		parsed = false;
 		ns_ = 0;
 	}
 	
@@ -251,11 +250,6 @@ struct Read {
 	BTDnaString patFw;            // forward-strand sequence
 	BTDnaString patRc;            // reverse-complement sequence
 	BTString    qual;             // quality values
-	
-	// For those parsers which do byte block parsing
-	char* readOrigRawBuf;	
-	size_t* cur_raw_buf_;
-	size_t raw_buf_len_;	
 
 	BTDnaString patFwRev;
 	BTDnaString patRcRev;
@@ -270,7 +264,6 @@ struct Read {
 	                    // and which mate ("end") this is
 	int      mate;      // 0 = single-end, 1 = mate1, 2 = mate2
 	uint32_t seed;      // random seed
-	bool     parsed;    // true iff read has been fully parsed
 	size_t   ns_;       // # Ns
 	char     filter;    // if read format permits filter char, set it here
 	int      trimmed5;  // amount actually trimmed off 5' end

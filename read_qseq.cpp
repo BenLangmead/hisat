@@ -219,7 +219,7 @@ pair<bool, int> QseqPatternSource::nextBatchFromFile(
 	return success; \
 }
 
-bool QseqPatternSource::parse(Read& ra, Read& rb, TReadId rdid) const {
+bool QseqPatternSource::parse(Read& ra, Read& rb) const {
 #if 0
 	r.reset();
 	success = true;

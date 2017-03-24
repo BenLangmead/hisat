@@ -105,45 +105,14 @@ struct PerThreadReadBuf {
 	{
 		bufa_.resize(max_buf);
 		bufb_.resize(max_buf);
-		raw_bufa_length = 0;
-		raw_bufb_length = 0;
 		reset();
 	}
-
-	void set_buf_ptrs(Read* r, bool is_read_a) {
-		if(is_read_a) {
-			r->readOrigRawBuf = &raw_bufa_[cur_raw_bufa_];
-			r->cur_raw_buf_ = &cur_raw_bufa_;
-			r->raw_buf_len_ = raw_bufa_length - cur_raw_bufa_;
-		}
-		else {
-			r->readOrigRawBuf = &raw_bufb_[cur_raw_bufb_];
-			r->cur_raw_buf_ = &cur_raw_bufb_;
-			r->raw_buf_len_ = raw_bufb_length > 0? (raw_bufb_length - cur_raw_bufb_) : 0;
-		}
-	}
 	
-	Read& read_a() { 
-		if(use_byte_buffer)
-			set_buf_ptrs(&bufa_[cur_buf_], true);
-		return bufa_[cur_buf_]; 
-	}
-
-	Read& read_b() {
-		if(use_byte_buffer)
-			set_buf_ptrs(&bufb_[cur_buf_], false);
-		return bufb_[cur_buf_]; 
-	}
-
-	//if the constant version is needed
-	//then only support read batches	
-	const Read& read_a() const { 
-		return bufa_[cur_buf_]; 
-	}
-
-	const Read& read_b() const {
-		return bufb_[cur_buf_]; 
-	}
+	Read& read_a() { return bufa_[cur_buf_]; }
+	Read& read_b() { return bufb_[cur_buf_]; }
+	
+	const Read& read_a() const { return bufa_[cur_buf_]; }
+	const Read& read_b() const { return bufb_[cur_buf_]; }
 	
 	/**
 	 * Return read id for read/pair currently in the buffer.
@@ -157,19 +126,10 @@ struct PerThreadReadBuf {
 	 * Reset state as though no reads have been read.
 	 */
 	void reset() {
-		use_byte_buffer = false;
 		cur_buf_ = bufa_.size();
-		cur_raw_bufa_ = raw_bufa_length;
-		cur_raw_bufb_ = raw_bufb_length;
-		raw_bufa_length = 0;
-		raw_bufb_length = 0;
 		for(size_t i = 0; i < max_buf_; i++) {
 			bufa_[i].reset();
 			bufb_[i].reset();
-		}
-		for(size_t i = 0; i < max_raw_buf_+max_raw_buf_overrun_; i++) {
-			raw_bufa_[i] = '\0';
-			raw_bufb_[i] = '\0';
 		}
 		rdid_ = std::numeric_limits<TReadId>::max();
 	}
@@ -177,22 +137,7 @@ struct PerThreadReadBuf {
 	/**
 	 * Advance cursor to next element
 	 */
-	//modified to check raw buffer if being used
-	//TODO: to we want to do both at the same time?
-	//yes I think so
 	void next() {
-		if(use_byte_buffer) {
-			assert_lt(cur_raw_bufa_, raw_bufa_length);
-			//since we don't know exactly
-			//how many reads we'll get
-			//we may need to resize
-			if(cur_buf_ + 1 >= max_buf_) {
-				max_buf_ *= 2;
-				bufa_.resize(max_buf_);
-				bufb_.resize(max_buf_);
-			}
-		}
-		
 		assert_lt(cur_buf_, bufa_.size());
 		cur_buf_++;
 	}
@@ -200,22 +145,9 @@ struct PerThreadReadBuf {
 	/**
 	 * Return true when there's nothing left to dish out.
 	 */
-	//modified to check raw buffer if being used
 	bool exhausted() {
-		if(use_byte_buffer) {
-			assert_leq(cur_raw_bufa_, raw_bufa_length);
-			return cur_raw_bufa_ >= raw_bufa_length;
-		}
 		assert_leq(cur_buf_, bufa_.size());
-		return cur_buf_ >= bufa_.size();
-	}
-
-	bool is_last(int last_buf_size) {
-		if(use_byte_buffer) {
-			//return cur_raw_bufa_ >= raw_bufa_length-1;
-			return exhausted();
-		}
-		return cur_buf_ == last_buf_size-1 ;
+		return cur_buf_ >= bufa_.size()-1;
 	}
 	
 	/**
@@ -224,8 +156,6 @@ struct PerThreadReadBuf {
 	 */
 	void init() {
 		cur_buf_ = 0;
-		cur_raw_bufa_ = 0;
-		cur_raw_bufb_ = 0;
 	}
 	
 	/**
@@ -234,20 +164,11 @@ struct PerThreadReadBuf {
 	void setReadId(TReadId rdid) {
 		rdid_ = rdid;
 	}
-
-	size_t raw_bufa_length; //actual length of buffer a at any given time	
-	size_t raw_bufb_length; //actual length of buffer b at any given time	
-	static const size_t max_raw_buf_ = 8000; //max # characters to read into buffer at once, 8000 ~32 100 bp reads
-	static const size_t max_raw_buf_overrun_ = 2000; //additional head room for the raw buffer to fill to the end of the fastq record
-	char raw_bufa_[max_raw_buf_+max_raw_buf_overrun_];       //raw character buffer for mate as	
-	char raw_bufb_[max_raw_buf_+max_raw_buf_overrun_];       //raw character buffer for mate bs
-	bool use_byte_buffer;
-	size_t max_buf_; // max # reads to read into buffer at once
+	
+	const size_t max_buf_; // max # reads to read into buffer at once
 	EList<Read> bufa_;     // Read buffer for mate as
 	EList<Read> bufb_;     // Read buffer for mate bs
 	size_t cur_buf_;       // Read buffer currently active
-	size_t cur_raw_bufa_;   // Byte buffer a currently active
-	size_t cur_raw_bufb_;   // Byte buffer b currently active
 	TReadId rdid_;         // index of read at offset 0 of bufa_/bufb_
 };
 
@@ -306,7 +227,7 @@ public:
 	/**
 	 * Finishes parsing a given read.  Happens outside the critical section.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) const = 0;
+	virtual bool parse(Read& ra, Read& rb) const = 0;
 	
 	/**
 	 * Reset so that next call to nextBatch* gets the first batch.
@@ -328,11 +249,6 @@ public:
 	 */
 	TReadId readCount() const { return readCnt_; }
 	
-	/**
-	 * Return number of bytes read by this stream so far.
-	 */
-	TReadId byteCount() const { return byteCnt_; }
-	
 protected:
 	
 	/// Pseudo-random seed
@@ -340,9 +256,6 @@ protected:
 	
 	/// The number of reads read by this PatternSource
 	volatile TReadId readCnt_;
-	
-	/// The number of bytes read by this PatternSource
-	volatile TReadId byteCnt_;
 	
 	/// Lock enforcing mutual exclusion for (a) file I/O, (b) writing fields
 	/// of this or another other shared object.
@@ -389,7 +302,7 @@ public:
 	/**
 	 * Finishes parsing outside the critical section
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) const {
+	virtual bool parse(Read& ra, Read& rb) const {
 		cerr << "In VectorPatternSource.parse()" << endl;
 		throw 1;
 		return false;
@@ -590,8 +503,8 @@ public:
 	/**
 	 * Finalize FASTA parsing outside critical section.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) const;
-
+	virtual bool parse(Read& ra, Read& rb) const;
+	
 protected:
 	
 	/**
@@ -659,8 +572,8 @@ public:
 	/**
 	 * Finalize tabbed parsing outside critical section.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) const;
-
+	virtual bool parse(Read& r, Read& rb) const;
+	
 protected:
 	
 	/**
@@ -736,8 +649,8 @@ public:
 	/**
 	 * Finalize qseq parsing outside critical section.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) const;
-
+	virtual bool parse(Read& ra, Read& rb) const;
+	
 protected:
 	
 	/**
@@ -820,8 +733,8 @@ public:
 	/**
 	 * Finalize FASTA parsing outside critical section.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) const;
-
+	virtual bool parse(Read& ra, Read& rb) const;
+	
 protected:
 	
 	/**
@@ -886,8 +799,8 @@ public:
 	/**
 	 * Finalize FASTQ parsing outside critical section.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) const;
-
+	virtual bool parse(Read& ra, Read& rb) const;
+	
 protected:
 	
 	/**
@@ -930,8 +843,8 @@ public:
 	/**
 	 * Finalize raw parsing outside critical section.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) const;
-
+	virtual bool parse(Read& ra, Read& rb) const;
+	
 protected:
 	
 	/**
@@ -971,11 +884,6 @@ public:
 #ifdef WITH_COHORTLOCK
 		mutex_m.reset_lock(p.nthreads);
 #endif
-#ifdef WITH_TBB
-		total_read_count.fetch_and_store(0);
-#else
-		total_read_count=0;
-#endif
 	}
 	
 	virtual ~PatternComposer() { }
@@ -990,12 +898,7 @@ public:
 	/**
 	 * Make appropriate call into the format layer to parse individual read.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) = 0;
-	
-	size_t update_total_read_count(size_t read_count); 
-	
-	size_t get_total_read_count() { return total_read_count; }
-
+	virtual bool parse(Read& ra, Read& rb) = 0;
 	
 	/**
 	 * Given the values for all of the various arguments used to specify
@@ -1027,18 +930,6 @@ protected:
 	/// Lock enforcing mutual exclusion for (a) file I/O, (b) writing fields
 	/// of this or another other shared object.
 	MUTEX_T mutex_m;
-
-	/// Similar to above, but only for the total_read_count variable
-	MUTEX_T mutex_m2;
-	
-	/// Number of reads read in from PatternSources	
-	
-#ifdef WITH_TBB
-	tbb::atomic<size_t> total_read_count;
-#else
-	volatile size_t total_read_count;
-#endif
-
 };
 
 /**
@@ -1090,8 +981,8 @@ public:
 	/**
 	 * Make appropriate call into the format layer to parse individual read.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) {
-		return (*src_)[0]->parse(ra, rb, rdid);
+	virtual bool parse(Read& ra, Read& rb) {
+		return (*src_)[0]->parse(ra, rb);
 	}
 	
 protected:
@@ -1161,8 +1052,8 @@ public:
 	/**
 	 * Make appropriate call into the format layer to parse individual read.
 	 */
-	virtual bool parse(Read& ra, Read& rb, TReadId rdid) {
-		return (*srca_)[0]->parse(ra, rb, rdid);
+	virtual bool parse(Read& ra, Read& rb) {
+		return (*srca_)[0]->parse(ra, rb);
 	}
 	
 protected:
@@ -1235,7 +1126,7 @@ private:
 	 * format layer) to parse the read.
 	 */
 	bool parse(Read& ra, Read& rb) {
-		return patsrc_.parse(ra, rb, buf_.rdid());
+		return patsrc_.parse(ra, rb);
 	}
 	
 	PatternComposer& patsrc_; // pattern composer
