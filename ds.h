@@ -3058,8 +3058,10 @@ public:
 		pagesz_(pagesz),
 		pages_(cat)
 	{
-		for(size_t i = 0; i < ((bytes+pagesz-1)/pagesz); i++) {
-			pages_.push_back(new uint8_t[pagesz]);
+		size_t super_page_num = ((bytes+pagesz-1)/pagesz + 1);
+		super_pages = new uint8_t[pagesz*super_page_num];
+		for(size_t i = 0; i < super_page_num ; i++) {
+			pages_.push_back(&super_pages[i*pagesz]);	
 #ifdef USE_MEM_TALLY
 			gMemTally.add(cat, pagesz);
 #else
@@ -3075,9 +3077,8 @@ public:
 	 * Free each page.
 	 */
 	~Pool() {
+		delete super_pages;
 		for(size_t i = 0; i < pages_.size(); i++) {
-			assert(pages_[i] != NULL);
-			delete[] pages_[i];
 #ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, pagesz_);
 #else
@@ -3127,6 +3128,7 @@ public:
 #endif
 
 public:
+	uint8_t*	super_pages; // for deleting of the one large chunk
 	int             cat_;    // memory category, for accounting purposes
 	uint32_t        cur_;    // next page to hand out
 	const uint64_t  bytes_;  // total bytes in the pool
