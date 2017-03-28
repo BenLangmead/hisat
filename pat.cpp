@@ -27,6 +27,10 @@
 #include "filebuf.h"
 #include "formats.h"
 
+#ifdef WITH_TBB
+	#include "tbb/atomic.h"
+#endif
+
 #ifdef USE_SRA
 
 #include "tinythread.h"
@@ -162,25 +166,32 @@ pair<bool, bool> PatternSourcePerThread::nextReadPair() {
 			return make_pair(false, true);
 		}
 		last_batch_ = res.first;
+		//this is either # of reads or # of bytes depending on the parser
 		last_batch_size_ = res.second;
 		assert_eq(0, buf_.cur_buf_);
 	} else {
 		buf_.next(); // advance cursor
 		assert_gt(buf_.cur_buf_, 0);
 	}
-	// Parse read/pair
-	assert(!buf_.read_a().readOrigBuf.empty());
+	// Now fully parse read/pair *outside* the critical section
+	//TODO: need to have a generic function to check
+	//that either the readOrigBuf or the raw buffer is filled
+	//assert(!buf_.read_a().readOrigBuf.empty());
+	//assert_gt(buf_.raw_bufa_length_, 0);
 	assert(buf_.read_a().empty());
 	if(!parse(buf_.read_a(), buf_.read_b())) {
 		return make_pair(false, false);
 	}
 	// Finalize read/pair
-	if(!buf_.read_b().readOrigBuf.empty()) {
+	//if(!buf_.read_b().readOrigBuf.empty()) { this probably segfaults
+	if(!buf_.read_b().patFw.empty()) {
 		finalizePair(buf_.read_a(), buf_.read_b());
 	} else {
 		finalize(buf_.read_a());
 	}
-	bool this_is_last = buf_.cur_buf_ == last_batch_size_-1;
+	//bool this_is_last = buf_.cur_buf_ == static_cast<unsigned int>(last_batch_size_-1);
+	//bool this_is_last = buf_.exhausted();
+	bool this_is_last = buf_.is_last(last_batch_size_);
 	return make_pair(true, this_is_last ? last_batch_ : false);
 }
 
@@ -278,6 +289,18 @@ pair<bool, int> DualPatternComposer::nextBatch(PerThreadReadBuf& pt) {
 	assert_leq(cur, srca_->size());
 	return make_pair(true, 0);
 }
+
+size_t PatternComposer::update_total_read_count(size_t read_count) {
+		// could use an atomic here, but going with locking for portability
+		//
+#ifdef WITH_TBB
+		total_read_count.fetch_and_add(read_count);
+#else
+		ThreadSafe ts(&mutex_m2); 
+		total_read_count+=read_count;
+#endif
+		return total_read_count;
+	}
 
 /**
  * Given the values for all of the various arguments used to specify
@@ -455,6 +478,7 @@ pair<bool, int> CFilePatternSource::nextBatch(
 	bool lock)
 {
 	bool done = false;
+	// will be nbytes if FASTQ parser used
 	int nread = 0;
 	
 	// synchronization at this level because both reading and manipulation of
@@ -802,7 +826,7 @@ pair<bool, int> FastaPatternSource::nextBatchFromFile(
 	return make_pair(done, readi);
 }
 
-bool FastaPatternSource::parse(Read& r, Read& rb) const {
+bool FastaPatternSource::parse(Read& r, Read& rb, TReadId rdid) const {
 	// We assume the light parser has put the raw data for the separate ends
 	// into separate Read objects.  That doesn't have to be the case, but
 	// that's how we've chosen to do it for FastqPatternSource
@@ -855,7 +879,7 @@ bool FastaPatternSource::parse(Read& r, Read& rb) const {
 		r.name.install(cbuf);
 	}
 	if(!rb.readOrigBuf.empty() && rb.patFw.empty()) {
-		return parse(rb, r);
+		return parse(rb, r, rdid);
 	}
 	return true;
 }
@@ -876,7 +900,7 @@ pair<bool, int> FastaContinuousPatternSource::nextBatchFromFile(
 }
 
 /// Read another pattern from a FASTA input file
-bool FastaContinuousPatternSource::parse(Read& r, Read& rb) const {
+bool FastaContinuousPatternSource::parse(Read& r, Read& rb, TReadId rdid) const {
 	assert(r.empty());
 	assert(rb.empty());
 #if 0
@@ -963,9 +987,21 @@ pair<bool, int> FastqPatternSource::nextBatchFromFile(
 	PerThreadReadBuf& pt,
 	bool batch_a)
 {
+	//changing this to read ~500K bytes 
+	//+ additional to the end of a FASTQ record
+	//into a raw buffer which is returned to
+	//PatternSourcePerThread::nextReadPair()
+	//which will then do the following parsing
+	//OUTSIDE of the CS
+	//So put the following parsing in a 
+	//separate function "lightParse(...)"
+	//in every PatternSource and PatternComposer
 	int c;
-	EList<Read>& readbuf = batch_a ? pt.bufa_ : pt.bufb_;
-	if(first_) {
+	pt.use_byte_buffer = true;
+	char* readBuf = batch_a ? pt.raw_bufa_ : pt.raw_bufb_;
+	size_t* raw_buf_length = batch_a ? &pt.raw_bufa_length : &pt.raw_bufb_length;
+	size_t bytes_read = 0;
+	/*if(first_) {
 		c = getc_unlocked(fp_);
 		while(c == '\r' || c == '\n') {
 			c = getc_unlocked(fp_);
@@ -975,54 +1011,110 @@ pair<bool, int> FastqPatternSource::nextBatchFromFile(
 			throw 1;
 		}
 		first_ = false;
-		readbuf[0].readOrigBuf.append('@');
-	}
+		readBuf[bytes_read++]='@';
+	}*/
 	bool done = false, aborted = false;
-	size_t readi = 0;
-	// Read until we run out of input or until we've filled the buffer
-	for(; readi < pt.max_buf_ && !done; readi++) {
-		SStringExpandable<char, 1024, 2, 1024>& buf = readbuf[readi].readOrigBuf;
-		assert(readi == 0 || buf.empty());
-		int newlines = 4;
-		while(newlines) {
+	bytes_read = fread(readBuf,1,pt.max_raw_buf_,fp_);
+	/*for(;bytes_read<pt.max_raw_buf_;bytes_read++)
+	{
+		c = getc_unlocked(fp_);
+		if(c < 0)
+			break;
+		readBuf[bytes_read] = c;
+	}*/
+	int reads_read = 32;
+	if (bytes_read == 0) {
+		done = true;
+		reads_read = 0;
+	}
+	// finish by filling the buffer out to the end of a FASTQ record
+	// so there's no partials
+	/*else {
+		size_t headroom = (pt.max_raw_buf_ - bytes_read) + pt.max_raw_buf_overrun_;
+		size_t i = 0;
+		c = getc_unlocked(fp_);
+		char prev_line_start_c = -1;
+		char prev_c=-1;
+		bool new_record = false;
+		int newlines = 0;
+		// check for:
+		// 1) out of input?
+		// 2) out of buffer? 
+		// 3) seen the start of a new FASTQ record OR
+		// 	if we have a new record, have we read all of it?
+		while(c >= 0 && i < headroom &&
+		      (!new_record || newlines < 4)) {
+			readBuf[bytes_read+i] = c;
+			prev_c = c;
 			c = getc_unlocked(fp_);
-			done = c < 0;
-			if(c == '\n' || (done && newlines == 1)) {
-				// Saw newline, or EOF that we're
-				// interpreting as final newline
-				newlines--;
-				c = '\n';
-			} else if(done) {
-				aborted = true; // Unexpected EOF
-				break;
+			i++;
+			// check for new FASTQ record
+			// we must have:
+			// 1) a new line in the previous char
+			// 2) the previous line's first char is a '@' (header line)
+			// 3) the current char is starting at 'A' or greater (sequence line)
+			// 	or is a '-' or '*' as per IUPAC/FASTA formatting guidelines
+			if(!new_record && 
+			   (prev_c == '\n' || prev_c == '\r') &&
+			   prev_line_start_c == '@' &&
+			   (c >= 65 || c == '*' || c == '-')) {
+				new_record = true;
+				newlines = 1;
 			}
-			buf.append(c);
+			if(prev_c == '\n' || prev_c == '\r')
+				prev_line_start_c = c;
+			if(c == '\n' || c == '\r') 
+				newlines++;
 		}
-	}
-	if(aborted) {
-		readi--;
-	}
-	return make_pair(done, readi);
+		// get last newline
+		if(c >= 0 && i < headroom)
+			readBuf[bytes_read+i] = c;
+		done = c < 0;
+		assert_leq(i,headroom);
+		*raw_buf_length = bytes_read+i+(i>0?1:0);
+	}*/
+	//currently aborted isn't used, not clear how to check for this
+	//return make_pair(done, aborted?1:0);
+	//fprintf(stderr,"raw buf length:%d\n",*raw_buf_length);
+	//fprintf(stderr,"raw buf contents:\n%s\n",readBuf);
+	//fprintf(stderr,"END raw buf contents\n");
+	//return make_pair(done, *raw_buf_length);
+	return make_pair(done, reads_read);
 }
 
-/// Read another pattern from a FASTQ input file
-bool FastqPatternSource::parse(Read &r, Read& rb) const {
+/**
+ * Finalize FASTQ parsing outside critical section.
+ */
+bool FastqPatternSource::parse(Read &r, Read& rb, TReadId rdid) const {
 	// We assume the light parser has put the raw data for the separate ends
 	// into separate Read objects.  That doesn't have to be the case, but
 	// that's how we've chosen to do it for FastqPatternSource
-	assert(!r.readOrigBuf.empty());
+	assert_gt(r.raw_buf_len_,0);
 	assert(r.empty());
 	int c;
-	size_t cur = 1;
+	size_t cur = 0;
+	const size_t buflen = r.raw_buf_len_;
 
+	//make sure we're not stuck in the middle
+	//of a previously failed-to-parse read
+	do {
+		c = r.readOrigRawBuf[cur++];
+	} while(cur < buflen && c != '@');
+	//if we end up at the end of the buffer, bail
+	//for this read after setting the 
+	//perthread buffer cursor accordingly
+	if(cur >= buflen) {
+		*r.cur_raw_buf_ = buflen;
+		return false;
+	}
 	// Parse read name
 	assert(r.name.empty());
 	while(true) {
-		assert(cur < r.readOrigBuf.length());
-		c = r.readOrigBuf[cur++];
+		assert_lt(cur, buflen);
+		c = r.readOrigRawBuf[cur++];
 		if(c == '\n' || c == '\r') {
 			do {
-				c = r.readOrigBuf[cur++];
+				c = r.readOrigRawBuf[cur++];
 			} while(c == '\n' || c == '\r');
 			break;
 		}
@@ -1042,25 +1134,21 @@ bool FastqPatternSource::parse(Read &r, Read& rb) const {
 				r.patFw.append(asc2dna[c]);
 			}
 		}
-		assert(cur < r.readOrigBuf.length());
-		c = r.readOrigBuf[cur++];
+		//assert(cur < r.readOrigBuf.length());
+		assert_lt(cur, buflen);
+		c = r.readOrigRawBuf[cur++];
 	}
 	r.trimmed5 = (int)(nchar - r.patFw.length());
 	r.trimmed3 = (int)(r.patFw.trimEnd(gTrim3));
 	
 	assert_eq('+', c);
 	do {
-		assert(cur < r.readOrigBuf.length());
-		c = r.readOrigBuf[cur++];
+		//assert(cur < r.readOrigBuf.length());
+		assert_lt(cur, buflen);
+		c = r.readOrigRawBuf[cur++];
 	} while(c != '\n' && c != '\r');
-	do {
-		assert(cur < r.readOrigBuf.length());
-		c = r.readOrigBuf[cur++];
-	} while(c == '\n' || c == '\r');
-	
-	// Now we're on the next non-blank line after the + line
-	if(r.patFw.empty()) {
-		return true; // done parsing empty read
+	while(cur < buflen && (c == '\n' || c == '\r')) {
+		c = r.readOrigRawBuf[cur++];
 	}
 
 	assert(r.qual.empty());
@@ -1072,8 +1160,8 @@ bool FastqPatternSource::parse(Read &r, Read& rb) const {
 		if(nqual++ >= r.trimmed5) {
 			r.qual.append(c);
 		}
-		while(cur < r.readOrigBuf.length()) {
-			c = r.readOrigBuf[cur++];
+		while(cur < buflen) {
+			c = r.readOrigRawBuf[cur++];
 			if (c == ' ') {
 				wrongQualityFormat(r.name);
 				return false;
@@ -1101,8 +1189,12 @@ bool FastqPatternSource::parse(Read &r, Read& rb) const {
 		itoa10<TReadId>(static_cast<TReadId>(readCnt_), cbuf);
 		r.name.install(cbuf);
 	}
-	if(!rb.readOrigBuf.empty() && rb.patFw.empty()) {
-		return parse(rb, r);
+	r.parsed = true;
+	//update perthread buffer cursor so next read
+	//will start on the right position
+	*r.cur_raw_buf_ += cur;
+	if(!rb.parsed && rb.raw_buf_len_ > 0) {
+		return parse(rb, r, rdid);
 	}
 	return true;
 }
@@ -1145,7 +1237,7 @@ pair<bool, int> TabbedPatternSource::nextBatchFromFile(
 	return make_pair(success, readi);
 }
 
-bool TabbedPatternSource::parse(Read& r, Read& rb) const {
+bool TabbedPatternSource::parse(Read& r, Read& rb, TReadId rdid) const {
 	r.reset();
 #if 0
 	// Skip over initial vertical whitespace
@@ -1462,7 +1554,7 @@ static inline int peekToEndOfLine(FileBuf& in) {
 }
 
 /// Read another pattern from a Raw input file
-bool RawPatternSource::parse(Read& r, Read& rb) const {
+bool RawPatternSource::parse(Read& r, Read& rb, TReadId rdid) const {
 #if 0
 	int c;
 	r.reset();
