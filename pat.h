@@ -204,7 +204,8 @@ struct PerThreadReadBuf {
 	bool exhausted() {
 		if(use_byte_buffer) {
 			assert_leq(cur_raw_bufa_, raw_bufa_length);
-			return cur_raw_bufa_ >= raw_bufa_length;
+			//return cur_raw_bufa_ >= raw_bufa_length;
+			return cur_buf_+1 >= 32;
 		}
 		assert_leq(cur_buf_, bufa_.size());
 		return cur_buf_ >= bufa_.size();

@@ -1014,21 +1014,21 @@ pair<bool, int> FastqPatternSource::nextBatchFromFile(
 		readBuf[bytes_read++]='@';
 	}*/
 	bool done = false, aborted = false;
-	bytes_read = fread(readBuf,1,pt.max_raw_buf_,fp_);
-	/*for(;bytes_read<pt.max_raw_buf_;bytes_read++)
+	//bytes_read = fread(readBuf,1,pt.max_raw_buf_,fp_);
+	for(;bytes_read<pt.max_raw_buf_;bytes_read++)
 	{
 		c = getc_unlocked(fp_);
 		if(c < 0)
 			break;
 		readBuf[bytes_read] = c;
-	}*/
+	}
 	int reads_read = 32;
 	if (bytes_read == 0) {
 		done = true;
 		reads_read = 0;
 	}
 	// finish by filling the buffer out to the end of a FASTQ record
-	// so there's no partials
+	// so there's nopartials
 	/*else {
 		size_t headroom = (pt.max_raw_buf_ - bytes_read) + pt.max_raw_buf_overrun_;
 		size_t i = 0;
@@ -1073,6 +1073,7 @@ pair<bool, int> FastqPatternSource::nextBatchFromFile(
 		assert_leq(i,headroom);
 		*raw_buf_length = bytes_read+i+(i>0?1:0);
 	}*/
+	*raw_buf_length = bytes_read;
 	//currently aborted isn't used, not clear how to check for this
 	//return make_pair(done, aborted?1:0);
 	//fprintf(stderr,"raw buf length:%d\n",*raw_buf_length);
