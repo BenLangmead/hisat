@@ -158,6 +158,79 @@ static void aligner_cache_tests() {
 	}
 }
 
+bool AlignmentCache::addOnTheFly(
+	QVal& qv,         // qval that points to the range of reference substrings
+	const SAKey& sak, // the key holding the reference substring
+	TIndexOffU topf,    // top range elt in BWT index
+	TIndexOffU botf,    // bottom range elt in BWT index
+	TIndexOffU topb,    // top range elt in BWT' index
+	TIndexOffU botb,    // bottom range elt in BWT' index
+	bool getLock)
+{
+	if(shared_ && getLock) {
+		ThreadSafe ts(mutex_m);
+		return addOnTheFlyImpl(qv, sak, topf, botf, topb, botb);
+	} else {
+		return addOnTheFlyImpl(qv, sak, topf, botf, topb, botb);
+	}
+}
+
+/**
+ * Add a new association between a read sequnce ('seq') and a
+ * reference sequence ('')
+ */
+template <typename index_t>
+bool AlignmentCache<index_t>::addOnTheFlyImpl(
+								 QVal<index_t>& qv, // qval that points to the range of reference substrings
+								 const SAKey& sak,  // the key holding the reference substring
+								 index_t topf,      // top range elt in BWT index
+								 index_t botf,      // bottom range elt in BWT index
+								 index_t topb,      // top range elt in BWT' index
+								 index_t botb)      // bottom range elt in BWT' index
+{
+	bool added = true;
+	// If this is the first reference sequence we're associating with
+	// the query sequence, initialize the QVal.
+	if(!qv.valid()) {
+		qv.init((index_t)qlist_.size(), 0, 0);
+	}
+	qv.addRange(botf-topf); // update tally for # ranges and # elts
+	if(!qlist_.add(pool(), sak)) {
+		return false; // Exhausted pool memory
+	}
+#ifndef NDEBUG
+	for(index_t i = qv.offset(); i < qlist_.size(); i++) {
+		if(i > qv.offset()) {
+			assert(qlist_.get(i) != qlist_.get(i-1));
+		}
+	}
+#endif
+	assert_eq(qv.offset() + qv.numRanges(), qlist_.size());
+	SANode *s = samap_.add(pool(), sak, &added);
+	if(s == NULL) {
+		return false; // Exhausted pool memory
+	}
+	assert(s->key.repOk());
+	if(added) {
+		s->payload.i = (index_t)salist_.size();
+		s->payload.len = botf - topf;
+		s->payload.topf = topf;
+		s->payload.topb = topb;
+		for(size_t j = 0; j < (botf-topf); j++) {
+			if(!salist_.add(pool(), (index_t)0xffffffff)) {
+				// Change the payload's len field
+				s->payload.len = (uint32_t)j;
+				return false; // Exhausted pool memory
+			}
+		}
+		assert(s->payload.repOk(*this));
+	}
+	// Now that we know all allocations have succeeded, we can do a few final
+	// updates
+	
+	return true; 
+}
+
 /**
  * A way of feeding simply tests to the seed alignment infrastructure.
  */

@@ -467,39 +467,14 @@ public:
 		index_t& nelt,
 		bool getLock = true)
 	{
-        ThreadSafe ts(lockPtr(), shared_ && getLock);
-		assert(qv.repOk(*this));
-		const index_t refi = qv.offset();
-		const index_t reff = refi + qv.numRanges();
-		// For each reference sequence sufficiently similar to the
-		// query sequence in the QKey...
-		for(index_t i = refi; i < reff; i++) {
-			// Get corresponding SAKey, containing similar reference
-			// sequence & length
-			SAKey sak = qlist_.get(i);
-			// Shouldn't have identical keys in qlist_
-			assert(i == refi || qlist_.get(i) != qlist_.get(i-1));
-			// Get corresponding SANode
-			SANode *n = samap_.lookup(sak);
-			assert(n != NULL);
-			const SAVal<index_t>& sav = n->payload;
-			assert(sav.repOk(*this));
-			if(sav.len > 0) {
-				nrange++;
-				satups.expand();
-				satups.back().init(sak, sav.topf, sav.topb, TSlice(salist_, sav.i, sav.len));
-				nelt += sav.len;
-#ifndef NDEBUG
-				// Shouldn't add consecutive identical entries too satups
-				if(i > refi) {
-					const SATuple<index_t> b1 = satups.back();
-					const SATuple<index_t> b2 = satups[satups.size()-2];
-					assert(b1.key != b2.key || b1.topf != b2.topf || b1.offs != b2.offs);
-				}
-#endif
-			}
+		if(shared_ && getLock) {
+			ThreadSafe ts(mutex_m);
+			queryQvalImpl(qv, satups, nrange, nelt);
+		} else {
+			queryQvalImpl(qv, satups, nrange, nelt);
 		}
 	}
+	
 
 	/**
 	 * Return true iff the cache has no entries in it.
@@ -527,10 +502,12 @@ public:
 		bool *added,
 		bool getLock = true)
 	{
-        ThreadSafe ts(lockPtr(), shared_ && getLock);
-		assert(qk.cacheable());
-		QNode *n = qmap_.add(pool(), qk, added);
-		return (n != NULL ? &n->payload : NULL);
+		if(shared_ && getLock) {
+			ThreadSafe ts(mutex_m);
+			return addImpl(qk, added);
+		} else {
+			return addImpl(qk, added);
+		}
 	}
 
 	/**
@@ -551,8 +528,8 @@ public:
 	 * ranges in this cache will become invalid and the corresponding
 	 * reads will have to be re-aligned.
 	 */
-	void clear(bool getLock = true) {
-        ThreadSafe ts(lockPtr(), shared_ && getLock);
+	void clear() {
+        	ThreadSafe ts(mutex_m);
 		pool_.clear();
 		qmap_.clear();
 		qlist_.clear();
@@ -594,14 +571,6 @@ public:
 	}
 
 	/**
-	 * Return a const pointer to the lock object.  This allows us to
-	 * write const member functions that grab the lock.
-	 */
-	MUTEX_T* lockPtr() const {
-	    return const_cast<MUTEX_T*>(&mutex_m);
-	}
-	
-	/**
 	 * Return true iff this cache is shared among threads.
 	 */
 	bool shared() const { return shared_; }
@@ -623,6 +592,71 @@ protected:
 	bool     shared_;  // true -> this cache is global
 	MUTEX_T mutex_m;    // mutex used for syncronization in case the the cache is shared.
 	uint32_t version_; // cache version
+
+private:
+
+	template <int S>
+	void queryQvalImpl(
+		const QVal<index_t>& qv,
+		EList<SATuple<index_t>, S>& satups,
+		index_t& nrange,
+		index_t& nelt)
+	{
+
+		assert(qv.repOk(*this));
+		const index_t refi = qv.offset();
+		const index_t reff = refi + qv.numRanges();
+		// For each reference sequence sufficiently similar to the
+		// query sequence in the QKey...
+		for(index_t i = refi; i < reff; i++) {
+			// Get corresponding SAKey, containing similar reference
+			// sequence & length
+			SAKey sak = qlist_.get(i);
+			// Shouldn't have identical keys in qlist_
+			assert(i == refi || qlist_.get(i) != qlist_.get(i-1));
+			// Get corresponding SANode
+			SANode *n = samap_.lookup(sak);
+			assert(n != NULL);
+			const SAVal<index_t>& sav = n->payload;
+			assert(sav.repOk(*this));
+			if(sav.len > 0) {
+				nrange++;
+				satups.expand();
+				satups.back().init(sak, sav.topf, sav.topb, TSlice(salist_, sav.i, sav.len));
+				nelt += sav.len;
+#ifndef NDEBUG
+				// Shouldn't add consecutive identical entries too satups
+				if(i > refi) {
+					const SATuple<index_t> b1 = satups.back();
+					const SATuple<index_t> b2 = satups[satups.size()-2];
+					assert(b1.key != b2.key || b1.topf != b2.topf || b1.offs != b2.offs);
+				}
+#endif
+			}
+		}
+	}
+	
+	
+	
+	
+	/**
+	 * Add a new query key ('qk'), usually a 2-bit encoded substring of
+	 * the read) as the key in a new Red-Black node in the qmap and
+	 * return a pointer to the node's QVal.
+	 *
+	 * The expectation is that the caller is about to set about finding
+	 * associated reference substrings, and that there will be future
+	 * calls to addOnTheFly to add associations to reference substrings
+	 * found.
+	 */
+	QVal<index_t>* addImpl(
+		const QKey& qk,
+		bool *added)
+	{
+		assert(qk.cacheable());
+		QNode *n = qmap_.add(pool(), qk, added);
+		return (n != NULL ? &n->payload : NULL);
+	}
 };
 
 /**
@@ -952,62 +986,5 @@ bool SAVal<index_t>::repOk(const AlignmentCache<index_t>& ac) const {
 }
 #endif
 
-/**
- * Add a new association between a read sequnce ('seq') and a
- * reference sequence ('')
- */
-template <typename index_t>
-bool AlignmentCache<index_t>::addOnTheFly(
-								 QVal<index_t>& qv, // qval that points to the range of reference substrings
-								 const SAKey& sak,  // the key holding the reference substring
-								 index_t topf,      // top range elt in BWT index
-								 index_t botf,      // bottom range elt in BWT index
-								 index_t topb,      // top range elt in BWT' index
-								 index_t botb,      // bottom range elt in BWT' index
-								 bool getLock)
-{
-    ThreadSafe ts(lockPtr(), shared_ && getLock);
-	bool added = true;
-	// If this is the first reference sequence we're associating with
-	// the query sequence, initialize the QVal.
-	if(!qv.valid()) {
-		qv.init((index_t)qlist_.size(), 0, 0);
-	}
-	qv.addRange(botf-topf); // update tally for # ranges and # elts
-	if(!qlist_.add(pool(), sak)) {
-		return false; // Exhausted pool memory
-	}
-#ifndef NDEBUG
-	for(index_t i = qv.offset(); i < qlist_.size(); i++) {
-		if(i > qv.offset()) {
-			assert(qlist_.get(i) != qlist_.get(i-1));
-		}
-	}
-#endif
-	assert_eq(qv.offset() + qv.numRanges(), qlist_.size());
-	SANode *s = samap_.add(pool(), sak, &added);
-	if(s == NULL) {
-		return false; // Exhausted pool memory
-	}
-	assert(s->key.repOk());
-	if(added) {
-		s->payload.i = (index_t)salist_.size();
-		s->payload.len = botf - topf;
-		s->payload.topf = topf;
-		s->payload.topb = topb;
-		for(size_t j = 0; j < (botf-topf); j++) {
-			if(!salist_.add(pool(), (index_t)0xffffffff)) {
-				// Change the payload's len field
-				s->payload.len = (uint32_t)j;
-				return false; // Exhausted pool memory
-			}
-		}
-		assert(s->payload.repOk(*this));
-	}
-	// Now that we know all allocations have succeeded, we can do a few final
-	// updates
-	
-	return true; 
-}
 
 #endif /*ALIGNER_CACHE_H_*/

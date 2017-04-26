@@ -3060,8 +3060,6 @@ public:
 	{
 		size_t super_page_num = ((bytes+pagesz-1)/pagesz + 1);
 		super_pages = new uint8_t[pagesz*super_page_num];
-		//for(size_t i = 0; i < ((bytes+pagesz-1)/pagesz); i++) {
-			//pages_.push_back(new uint8_t[pagesz]);
 		for(size_t i = 0; i < super_page_num ; i++) {
 			pages_.push_back(&super_pages[i*pagesz]);	
 #ifdef USE_MEM_TALLY
@@ -3079,9 +3077,6 @@ public:
 	 * Free each page.
 	 */
 	~Pool() {
-		/*for(size_t i = 0; i < pages_.size(); i++) {
-			assert(pages_[i] != NULL);
-			delete[] pages_[i];*/
 		delete super_pages;
 		for(size_t i = 0; i < pages_.size(); i++) {
 #ifdef USE_MEM_TALLY
@@ -3133,7 +3128,7 @@ public:
 #endif
 
 public:
-	uint8_t*	super_pages;
+	uint8_t*	super_pages; // for deleting of the one large chunk
 	int             cat_;    // memory category, for accounting purposes
 	uint32_t        cur_;    // next page to hand out
 	const uint64_t  bytes_;  // total bytes in the pool
