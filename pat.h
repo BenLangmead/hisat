@@ -399,6 +399,10 @@ public:
 	
 private:
 	
+	pair<bool, int> nextBatchImpl(
+		PerThreadReadBuf& pt,
+		bool batch_a);
+	
 	size_t cur_;            // index for first read of next batch
 	size_t skip_;           // # reads to skip
 	bool paired_;           // ?
@@ -487,6 +491,12 @@ protected:
 	FileBuf fb_;             // read file currently being read from
 	TReadId skip_;           // number of reads to skip
 	bool first_;             // parsing first record in first file?
+
+private:
+
+	pair<bool, int> nextBatchImpl(
+		PerThreadReadBuf& pt,
+		bool batch_a);
 };
 
 /**
@@ -569,6 +579,12 @@ protected:
 	TReadId skip_;           // number of reads to skip
 	bool first_;             // parsing first record in first file?
 	char buf_[64*1024];      // file buffer
+
+private:
+
+	pair<bool, int> nextBatchImpl(
+		PerThreadReadBuf& pt,
+		bool batch_a);
 };
 
 /**

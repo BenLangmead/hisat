@@ -379,6 +379,8 @@ public:
     void read(ifstream& in, bool novel = true);
     
 private:
+    
+    bool getSpliceSiteImpl(SpliceSite& ss, uint64_t ref) const;
     void getSpliceSites_recur(
                               const RedBlackNode<SpliceSitePos, uint32_t> *node,
 			      const EList<SpliceSite>& spliceSites_db,
@@ -466,6 +468,7 @@ public:
     void read(ifstream& in, bool novel = true);
     
 private:
+    bool getSpliceSiteImpl(SpliceSite& ss, uint64_t ref) const;
     void getSpliceSites_recur(
                               const RedBlackNode<SpliceSitePos, uint32_t> *node,
                               uint32_t ref,

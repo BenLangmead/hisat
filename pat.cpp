@@ -212,7 +212,7 @@ pair<bool, int> SoloPatternComposer::nextBatch(PerThreadReadBuf& pt) {
 				true); // grab lock below
 		} while(!res.first && res.second == 0);
 		if(res.second == 0) {
-			ThreadSafe ts(&mutex_m);
+			ThreadSafe ts(mutex_m);
 			if(cur + 1 > cur_) {
 				cur_++;
 			}
@@ -242,7 +242,7 @@ pair<bool, int> DualPatternComposer::nextBatch(PerThreadReadBuf& pt) {
 				true); // grab lock below
 			bool done = res.first;
 			if(!done && res.second == 0) {
-				ThreadSafe ts(&mutex_m);
+				ThreadSafe ts(mutex_m);
 				if(cur + 1 > cur_) cur_++;
 				cur = cur_; // Move on to next PatternSource
 				continue; // on to next pair of PatternSources
@@ -253,7 +253,7 @@ pair<bool, int> DualPatternComposer::nextBatch(PerThreadReadBuf& pt) {
 			// Lock to ensure that this thread gets parallel reads
 			// in the two mate files
 			{
-				ThreadSafe ts(&mutex_m);
+				ThreadSafe ts(mutex_m);
 				resa = (*srca_)[cur]->nextBatch(
 					pt,
 					true,   // batch A
@@ -270,7 +270,7 @@ pair<bool, int> DualPatternComposer::nextBatch(PerThreadReadBuf& pt) {
 				     << "than in file specified with -2" << endl;
 				throw 1;
 			} else if(resa.second == 0 && resb.second == 0) {
-				ThreadSafe ts(&mutex_m);
+				ThreadSafe ts(mutex_m);
 				if(cur + 1 > cur_) {
 					cur_++;
 				}
@@ -430,17 +430,15 @@ void PatternComposer::free_EList_pmembers( const EList<PatternSource*> &elist) {
  * it should convey anything about the individual read files, like whether
  * we finished one of them.
  */
-pair<bool, int> BufferedFilePatternSource::nextBatch(
+pair<bool, int> BufferedFilePatternSource::nextBatchImpl(
 	PerThreadReadBuf& pt,
-	bool batch_a,
-	bool lock)
+	bool batch_a)
 {
 	bool done = false;
 	int nread = 0;
 	
 	// synchronization at this level because both reading and manipulation of
 	// current file pointer have to be protected
-	ThreadSafe ts(&mutex, lock);
 	pt.setReadId(readCnt_);
 	while(true) { // loop that moves on to next file when needed
 		do {
@@ -463,6 +461,21 @@ pair<bool, int> BufferedFilePatternSource::nextBatch(
 	return make_pair(done, nread);
 }
 
+pair<bool, int> BufferedFilePatternSource::nextBatch(
+	PerThreadReadBuf& pt,
+	bool batch_a,
+	bool lock)
+{
+	if(lock) {
+		// synchronization at this level because both reading and manipulation of
+		// current file pointer have to be protected
+		ThreadSafe ts(mutex);
+		return nextBatchImpl(pt, batch_a);
+	} else {
+		return nextBatchImpl(pt, batch_a);
+	}
+}
+
 
 /**
  * Fill Read with the sequence, quality and name for the next
@@ -472,10 +485,9 @@ pair<bool, int> BufferedFilePatternSource::nextBatch(
  * Returns pair<bool, int> where bool indicates whether we're
  * completely done, and int indicates how many reads were read.
  */
-pair<bool, int> CFilePatternSource::nextBatch(
+pair<bool, int> CFilePatternSource::nextBatchImpl(
 	PerThreadReadBuf& pt,
-	bool batch_a,
-	bool lock)
+	bool batch_a)
 {
 	bool done = false;
 	// will be nbytes if FASTQ parser used
@@ -483,7 +495,6 @@ pair<bool, int> CFilePatternSource::nextBatch(
 	
 	// synchronization at this level because both reading and manipulation of
 	// current file pointer have to be protected
-	ThreadSafe ts(&mutex, lock);
 	pt.setReadId(readCnt_);
 	while(true) { // loop that moves on to next file when needed
 		do {
@@ -504,6 +515,21 @@ pair<bool, int> CFilePatternSource::nextBatch(
 	assert_geq(nread, 0);
 	readCnt_ += nread;
 	return make_pair(done, nread);
+}
+
+pair<bool, int> CFilePatternSource::nextBatch(
+	PerThreadReadBuf& pt,
+	bool batch_a,
+	bool lock)
+{
+	if(lock) {
+		// synchronization at this level because both reading and manipulation of
+		// current file pointer have to be protected
+		ThreadSafe ts(mutex);
+		return nextBatchImpl(pt, batch_a);
+	} else {
+		return nextBatchImpl(pt, batch_a);
+	}
 }
 
 /**
@@ -643,15 +669,13 @@ VectorPatternSource::VectorPatternSource(
  * in the contsructor.  This essentially modifies the pt as though we read
  * in some number of patterns.
  */
-pair<bool, int> VectorPatternSource::nextBatch(
+pair<bool, int> VectorPatternSource::nextBatchImpl(
 	PerThreadReadBuf& pt,
-	bool batch_a,
-	bool lock)
+	bool batch_a)
 {
 	bool success = true;
 	int nread = 0;
 	pt.reset();
-	ThreadSafe ts(&mutex, lock);
 	pt.setReadId(readCnt_);
 #if 0
 	// TODO: set nread to min of pt.size() and total - cur_
@@ -661,6 +685,20 @@ pair<bool, int> VectorPatternSource::nextBatch(
 	readCnt_ += nread;
 	return make_pair(success, nread);
 }
+
+pair<bool, int> VectorPatternSource::nextBatch(
+	PerThreadReadBuf& pt,
+	bool batch_a,
+	bool lock)
+{
+	if(lock) {
+		ThreadSafe ts(mutex);
+		return nextBatchImpl(pt, batch_a);
+	} else {
+		return nextBatchImpl(pt, batch_a);
+	}
+}
+
 
 #if 0
 /**

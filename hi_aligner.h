@@ -2252,8 +2252,7 @@ struct HIMetrics {
 	 * object.  This is the only safe way to update a HIMetrics shared
 	 * by multiple threads.
 	 */
-	void merge(const HIMetrics& r, bool getLock = false) {
-        ThreadSafe ts(&mutex_m, getLock);
+	void mergeImpl(const HIMetrics& r) {
         localatts += r.localatts;
         anchoratts += r.anchoratts;
         localindexatts += r.localindexatts;
@@ -2262,6 +2261,20 @@ struct HIMetrics {
         globalgenomecoords += r.globalgenomecoords;
         localgenomecoords += r.localgenomecoords;
     }
+
+	void merge(const HIMetrics& r, bool getLock = false) {
+		if(getLock) {
+        		ThreadSafe ts(mutex_m);
+			mergeImpl(r);
+		}
+		else
+		{
+			mergeImpl(r);
+		}
+	}
+
+
+
 	   
     uint64_t localatts;      // # attempts of local search
     uint64_t anchoratts;     // # attempts of anchor search

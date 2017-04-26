@@ -1341,7 +1341,6 @@ struct SeedSearchMetrics {
 	 * SeedSearchMetrics object shread by multiple threads.
 	 */
 	void merge(const SeedSearchMetrics& m, bool getLock = false) {
-        ThreadSafe ts(&mutex_m, getLock);
 		seedsearch   += m.seedsearch;
 		possearch    += m.possearch;
 		intrahit     += m.intrahit;
