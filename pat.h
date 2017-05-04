@@ -205,7 +205,7 @@ struct PerThreadReadBuf {
 		if(use_byte_buffer) {
 			assert_leq(cur_raw_bufa_, raw_bufa_length);
 			//return cur_raw_bufa_ >= raw_bufa_length;
-			return cur_buf_+1 >= 32;
+			return cur_buf_+1 >= static_num_reads;
 		}
 		assert_leq(cur_buf_, bufa_.size());
 		return cur_buf_ >= bufa_.size();
@@ -237,9 +237,10 @@ struct PerThreadReadBuf {
 	}
 
 	size_t raw_bufa_length; //actual length of buffer a at any given time	
-	size_t raw_bufb_length; //actual length of buffer b at any given time	
+	size_t raw_bufb_length; //actual length of buffer b at any given time
+	static const size_t static_num_reads = 32; //statically defined size of input buffer
 	//static const size_t max_raw_buf_ = 8000; //max # characters to read into buffer at once, 8000 ~32 100 bp reads
-	static const size_t max_raw_buf_ = 9760; //max # characters to read into buffer at once, 8000 ~32 100 bp reads
+	static const size_t max_raw_buf_ = static_num_reads * 305; //max # characters to read into buffer at once, 9760 is exactly 32 100 bp reads w/ 305 chars per read record
 	static const size_t max_raw_buf_overrun_ = 2000; //additional head room for the raw buffer to fill to the end of the fastq record
 	char raw_bufa_[max_raw_buf_+max_raw_buf_overrun_];       //raw character buffer for mate as	
 	char raw_bufb_[max_raw_buf_+max_raw_buf_overrun_];       //raw character buffer for mate bs

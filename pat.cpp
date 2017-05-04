@@ -1034,7 +1034,7 @@ pair<bool, int> FastqPatternSource::nextBatchFromFile(
 	//So put the following parsing in a 
 	//separate function "lightParse(...)"
 	//in every PatternSource and PatternComposer
-	int c;
+	int c = 0;
 	pt.use_byte_buffer = true;
 	char* readBuf = batch_a ? pt.raw_bufa_ : pt.raw_bufb_;
 	size_t* raw_buf_length = batch_a ? &pt.raw_bufa_length : &pt.raw_bufb_length;
@@ -1060,7 +1060,7 @@ pair<bool, int> FastqPatternSource::nextBatchFromFile(
 			break;
 		readBuf[bytes_read] = c;
 	}
-	int reads_read = 32;
+	int reads_read = pt.static_num_reads;
 	if (bytes_read == 0) {
 		done = true;
 		reads_read = 0;
