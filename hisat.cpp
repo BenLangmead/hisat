@@ -2946,510 +2946,511 @@ static void multiseedSearchWorker_hisat(void *vp) {
 	std::string msg;
 	ss << "thread: " << tid << " time: ";
 	msg = ss.str();
-	Timer timer(std::cout, msg.c_str());
+	{
+		Timer timer(std::cout, msg.c_str());
 #endif
-    
-	// Sinks: these are so that we can print tables encoding counts for
-	// events of interest on a per-read, per-seed, per-join, or per-SW
-	// level.  These in turn can be used to diagnose performance
-	// problems, or generally characterize performance.
-	
-	//const BitPairReference& refs   = *multiseed_refs;
-	auto_ptr<PatternSourcePerThreadFactory> patsrcFact(createPatsrcFactory(patsrc, pp, tid));
-	auto_ptr<PatternSourcePerThread> ps(patsrcFact->create());
-	
-	// Thread-local cache for seed alignments
-	PtrWrap<AlignmentCache<index_t> > scLocal;
-	if(!msNoCache) {
-		scLocal.init(new AlignmentCache<index_t>(seedCacheLocalMB * 1024 * 1024, false));
-	}
-	AlignmentCache<index_t> scCurrent(seedCacheCurrentMB * 1024 * 1024, false);
-	// Thread-local cache for current seed alignments
-	
-	// Interfaces for alignment and seed caches
-	AlignmentCacheIface<index_t> ca(
-                                    &scCurrent,
-                                    scLocal.get(),
-                                    msNoCache ? NULL : &scShared);
-	
-	// Instantiate an object for holding reporting-related parameters.
-    ReportingParams rp(
-                       (allHits ? std::numeric_limits<THitInt>::max() : khits), // -k
-                       mhits,             // -m/-M
-                       0,                 // penalty gap (not used now)
-                       msample,           // true -> -M was specified, otherwise assume -m
-                       gReportDiscordant, // report discordang paired-end alignments?
-                       gReportMixed);     // report unpaired alignments for paired reads?
-    
-	// Instantiate a mapping quality calculator
-	auto_ptr<Mapq> bmapq(new_mapq(mapqv, scoreMin, sc));
-	
-	// Make a per-thread wrapper for the global MHitSink object.
-	AlnSinkWrap<index_t> msinkwrap(
-                                   msink,         // global sink
-                                   rp,            // reporting parameters
-                                   *bmapq.get(),  // MAPQ calculator
-                                   (size_t)tid,   // thread id
-                                   secondary);    // secondary alignments
-    
-    SplicedAligner<index_t, local_index_t> splicedAligner(
-                                                          ebwtFw,
-                                                          minIntronLen,
-                                                          maxIntronLen,
-                                                          secondary,
-                                                          localAlign,
-                                                          thread_rids_mindist,
-                                                          no_spliced_alignment);
-	SwAligner sw;
-	OuterLoopMetrics olm;
-	SeedSearchMetrics sdm;
-	WalkMetrics wlm;
-	SwMetrics swmSeed, swmMate;
-	ReportingMetrics rpm;
-	RandomSource rnd, rndArb;
-	SSEMetrics sseU8ExtendMet;
-	SSEMetrics sseU8MateMet;
-	SSEMetrics sseI16ExtendMet;
-	SSEMetrics sseI16MateMet;
-   	DescentMetrics descm;
-	uint64_t nbtfiltst = 0; // TODO: find a new home for these
-	uint64_t nbtfiltsc = 0; // TODO: find a new home for these
-	uint64_t nbtfiltdo = 0; // TODO: find a new home for these
-    HIMetrics him;
-    
-	ASSERT_ONLY(BTDnaString tmp);
-    
-	int pepolFlag;
-	if(gMate1fw && gMate2fw) {
-		pepolFlag = PE_POLICY_FF;
-	} else if(gMate1fw && !gMate2fw) {
-		pepolFlag = PE_POLICY_FR;
-	} else if(!gMate1fw && gMate2fw) {
-		pepolFlag = PE_POLICY_RF;
-	} else {
-		pepolFlag = PE_POLICY_RR;
-	}
-	assert_geq(gMaxInsert, gMinInsert);
-	assert_geq(gMinInsert, 0);
-	PairedEndPolicy pepol(
-                          pepolFlag,
-                          gMaxInsert,
-                          gMinInsert,
-                          localAlign,
-                          gFlippedMatesOK,
-                          gDovetailMatesOK,
-                          gContainMatesOK,
-                          gOlapMatesOK,
-                          gExpandToFrag);
-    
-  	PerfMetrics metricsPt; // per-thread metrics object; for read-level metrics
-	BTString nametmp;
-	
-	PerReadMetrics prm;
-    
-	// Used by thread with threadid == 1 to measure time elapsed
-	time_t iTime = time(0);
-    
-	// Keep track of whether last search was exhaustive for mates 1 and 2
-	bool exhaustive[2] = { false, false };
-	// Keep track of whether mates 1/2 were filtered out last time through
-	bool filt[2]    = { true, true };
-	// Keep track of whether mates 1/2 were filtered out due Ns last time
-	bool nfilt[2]   = { true, true };
-	// Keep track of whether mates 1/2 were filtered out due to not having
-	// enough characters to rise about the score threshold.
-	bool scfilt[2]  = { true, true };
-	// Keep track of whether mates 1/2 were filtered out due to not having
-	// more characters than the number of mismatches permitted in a seed.
-	bool lenfilt[2] = { true, true };
-	// Keep track of whether mates 1/2 were filtered out by upstream qc
-	bool qcfilt[2]  = { true, true };
-    
-	rndArb.init((uint32_t)time(0));
-	int mergei = 0;
-	int mergeival = 16;
-	bool done = false;
-	while(!done) {
-		pair<bool, bool> ret = ps->nextReadPair();
-		bool success = ret.first;
-		done = ret.second;
-		if(!success && done) {
-			break;
-		} else if(!success) {
-			continue;
+	    
+		// Sinks: these are so that we can print tables encoding counts for
+		// events of interest on a per-read, per-seed, per-join, or per-SW
+		// level.  These in turn can be used to diagnose performance
+		// problems, or generally characterize performance.
+		
+		//const BitPairReference& refs   = *multiseed_refs;
+		auto_ptr<PatternSourcePerThreadFactory> patsrcFact(createPatsrcFactory(patsrc, pp, tid));
+		auto_ptr<PatternSourcePerThread> ps(patsrcFact->create());
+		
+		// Thread-local cache for seed alignments
+		PtrWrap<AlignmentCache<index_t> > scLocal;
+		if(!msNoCache) {
+			scLocal.init(new AlignmentCache<index_t>(seedCacheLocalMB * 1024 * 1024, false));
 		}
-		TReadId rdid = ps->read_a().rdid;
-        
-        if(nthreads > 1 && useTempSpliceSite) {
-            while(true) {
-                uint64_t min_rdid = 0;
-                {
-                    // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
-                    assert_gt(thread_rids.size(), 0);
-                    min_rdid = thread_rids[0];
-                    for(size_t i = 1; i < thread_rids.size(); i++) {
-                        if(thread_rids[i] < min_rdid) {
-                            min_rdid = thread_rids[i];
-                        }
-                    }
-                }
-                
-                if(min_rdid + thread_rids_mindist < rdid) {
-#if defined(_TTHREAD_WIN32_)
-                    Sleep(0);
-#elif defined(_TTHREAD_POSIX_)
-                    sched_yield();
-#endif
-                } else break;
-            }
-        }
-        
-		bool sample = true;
-		if(arbitraryRandom) {
-			ps->read_a().seed = rndArb.nextU32();
-			ps->read_b().seed = rndArb.nextU32();
+		AlignmentCache<index_t> scCurrent(seedCacheCurrentMB * 1024 * 1024, false);
+		// Thread-local cache for current seed alignments
+		
+		// Interfaces for alignment and seed caches
+		AlignmentCacheIface<index_t> ca(
+					    &scCurrent,
+					    scLocal.get(),
+					    msNoCache ? NULL : &scShared);
+		
+		// Instantiate an object for holding reporting-related parameters.
+	    ReportingParams rp(
+			       (allHits ? std::numeric_limits<THitInt>::max() : khits), // -k
+			       mhits,             // -m/-M
+			       0,                 // penalty gap (not used now)
+			       msample,           // true -> -M was specified, otherwise assume -m
+			       gReportDiscordant, // report discordang paired-end alignments?
+			       gReportMixed);     // report unpaired alignments for paired reads?
+	    
+		// Instantiate a mapping quality calculator
+		auto_ptr<Mapq> bmapq(new_mapq(mapqv, scoreMin, sc));
+		
+		// Make a per-thread wrapper for the global MHitSink object.
+		AlnSinkWrap<index_t> msinkwrap(
+					   msink,         // global sink
+					   rp,            // reporting parameters
+					   *bmapq.get(),  // MAPQ calculator
+					   (size_t)tid,   // thread id
+					   secondary);    // secondary alignments
+	    
+	    SplicedAligner<index_t, local_index_t> splicedAligner(
+								  ebwtFw,
+								  minIntronLen,
+								  maxIntronLen,
+								  secondary,
+								  localAlign,
+								  thread_rids_mindist,
+								  no_spliced_alignment);
+		SwAligner sw;
+		OuterLoopMetrics olm;
+		SeedSearchMetrics sdm;
+		WalkMetrics wlm;
+		SwMetrics swmSeed, swmMate;
+		ReportingMetrics rpm;
+		RandomSource rnd, rndArb;
+		SSEMetrics sseU8ExtendMet;
+		SSEMetrics sseU8MateMet;
+		SSEMetrics sseI16ExtendMet;
+		SSEMetrics sseI16MateMet;
+		DescentMetrics descm;
+		uint64_t nbtfiltst = 0; // TODO: find a new home for these
+		uint64_t nbtfiltsc = 0; // TODO: find a new home for these
+		uint64_t nbtfiltdo = 0; // TODO: find a new home for these
+	    HIMetrics him;
+	    
+		ASSERT_ONLY(BTDnaString tmp);
+	    
+		int pepolFlag;
+		if(gMate1fw && gMate2fw) {
+			pepolFlag = PE_POLICY_FF;
+		} else if(gMate1fw && !gMate2fw) {
+			pepolFlag = PE_POLICY_FR;
+		} else if(!gMate1fw && gMate2fw) {
+			pepolFlag = PE_POLICY_RF;
+		} else {
+			pepolFlag = PE_POLICY_RR;
 		}
-		if(sampleFrac < 1.0f) {
-			rnd.init(ROTL(ps->read_a().seed, 2));
-			sample = rnd.nextFloat() < sampleFrac;
-		}
-		if(rdid >= skipReads && rdid < qUpto && sample) {
-			// Align this read/pair
-			bool retry = true;
-			//
-			// Check if there is metrics reporting for us to do.
-			//
-			if(metricsIval > 0 &&
-			   (metricsOfb != NULL || metricsStderr) &&
-			   !metricsPerRead &&
-			   ++mergei == mergeival)
+		assert_geq(gMaxInsert, gMinInsert);
+		assert_geq(gMinInsert, 0);
+		PairedEndPolicy pepol(
+				  pepolFlag,
+				  gMaxInsert,
+				  gMinInsert,
+				  localAlign,
+				  gFlippedMatesOK,
+				  gDovetailMatesOK,
+				  gContainMatesOK,
+				  gOlapMatesOK,
+				  gExpandToFrag);
+	    
+		PerfMetrics metricsPt; // per-thread metrics object; for read-level metrics
+		BTString nametmp;
+		
+		PerReadMetrics prm;
+	    
+		// Used by thread with threadid == 1 to measure time elapsed
+		time_t iTime = time(0);
+	    
+		// Keep track of whether last search was exhaustive for mates 1 and 2
+		bool exhaustive[2] = { false, false };
+		// Keep track of whether mates 1/2 were filtered out last time through
+		bool filt[2]    = { true, true };
+		// Keep track of whether mates 1/2 were filtered out due Ns last time
+		bool nfilt[2]   = { true, true };
+		// Keep track of whether mates 1/2 were filtered out due to not having
+		// enough characters to rise about the score threshold.
+		bool scfilt[2]  = { true, true };
+		// Keep track of whether mates 1/2 were filtered out due to not having
+		// more characters than the number of mismatches permitted in a seed.
+		bool lenfilt[2] = { true, true };
+		// Keep track of whether mates 1/2 were filtered out by upstream qc
+		bool qcfilt[2]  = { true, true };
+	    
+		rndArb.init((uint32_t)time(0));
+		int mergei = 0;
+		int mergeival = 16;
+		bool done = false;
+		while(!done) {
+			pair<bool, bool> ret = ps->nextReadPair();
+			bool success = ret.first;
+			done = ret.second;
+			if(!success && done) {
+				break;
+			} else if(!success) {
+				continue;
+			}
+			TReadId rdid = ps->read_a().rdid;
+		
+		if(nthreads > 1 && useTempSpliceSite) {
+		    while(true) {
+			uint64_t min_rdid = 0;
 			{
-				// Do a periodic merge.  Update global metrics, in a
-				// synchronized manner if needed.
-				MERGE_METRICS(metrics);
-				mergei = 0;
-				// Check if a progress message should be printed
-				if(tid == 0) {
-					// Only thread 1 prints progress messages
-					time_t curTime = time(0);
-					if(curTime - iTime >= metricsIval) {
-						metrics.reportInterval(metricsOfb, metricsStderr, false, NULL);
-						iTime = curTime;
+			    // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
+			    assert_gt(thread_rids.size(), 0);
+			    min_rdid = thread_rids[0];
+			    for(size_t i = 1; i < thread_rids.size(); i++) {
+				if(thread_rids[i] < min_rdid) {
+				    min_rdid = thread_rids[i];
+				}
+			    }
+			}
+			
+			if(min_rdid + thread_rids_mindist < rdid) {
+#if defined(_TTHREAD_WIN32_)
+			    Sleep(0);
+#elif defined(_TTHREAD_POSIX_)
+			    sched_yield();
+#endif
+			} else break;
+		    }
+		}
+		
+			bool sample = true;
+			if(arbitraryRandom) {
+				ps->read_a().seed = rndArb.nextU32();
+				ps->read_b().seed = rndArb.nextU32();
+			}
+			if(sampleFrac < 1.0f) {
+				rnd.init(ROTL(ps->read_a().seed, 2));
+				sample = rnd.nextFloat() < sampleFrac;
+			}
+			if(rdid >= skipReads && rdid < qUpto && sample) {
+				// Align this read/pair
+				bool retry = true;
+				//
+				// Check if there is metrics reporting for us to do.
+				//
+				if(metricsIval > 0 &&
+				   (metricsOfb != NULL || metricsStderr) &&
+				   !metricsPerRead &&
+				   ++mergei == mergeival)
+				{
+					// Do a periodic merge.  Update global metrics, in a
+					// synchronized manner if needed.
+					MERGE_METRICS(metrics);
+					mergei = 0;
+					// Check if a progress message should be printed
+					if(tid == 0) {
+						// Only thread 1 prints progress messages
+						time_t curTime = time(0);
+						if(curTime - iTime >= metricsIval) {
+							metrics.reportInterval(metricsOfb, metricsStderr, false, NULL);
+							iTime = curTime;
+						}
 					}
 				}
-			}
-			prm.reset(); // per-read metrics
-			prm.doFmString = false;
-			if(sam_print_xt) {
-				gettimeofday(&prm.tv_beg, &prm.tz_beg);
-			}
+				prm.reset(); // per-read metrics
+				prm.doFmString = false;
+				if(sam_print_xt) {
+					gettimeofday(&prm.tv_beg, &prm.tz_beg);
+				}
 #ifdef PER_THREAD_TIMING
-			int cpu = 0, node = 0;
-			get_cpu_and_node(cpu, node);
-			if(cpu != current_cpu) {
-				ncpu_changeovers++;
-				current_cpu = cpu;
-			}
-			if(node != current_node) {
-				nnuma_changeovers++;
-				current_node = node;
-			}
+				int cpu = 0, node = 0;
+				get_cpu_and_node(cpu, node);
+				if(cpu != current_cpu) {
+					ncpu_changeovers++;
+					current_cpu = cpu;
+				}
+				if(node != current_node) {
+					nnuma_changeovers++;
+					current_node = node;
+				}
 #endif
-			// Try to align this read
-			while(retry) {
-				retry = false;
-				ca.nextRead(); // clear the cache
-				olm.reads++;
-				assert(!ca.aligning());
-				bool paired = !ps->read_b().empty();
-				const size_t rdlen1 = ps->read_a().length();
-				const size_t rdlen2 = paired ? ps->read_b().length() : 0;
-				olm.bases += (rdlen1 + rdlen2);
-				msinkwrap.nextRead(
-                                   &ps->read_a(),
-                                   paired ? &ps->read_b() : NULL,
-                                   rdid,
-                                   sc.qualitiesMatter());
-				assert(msinkwrap.inited());
-				size_t rdlens[2] = { rdlen1, rdlen2 };
-				// Calculate the minimum valid score threshold for the read
-				TAlScore minsc[2], maxpen[2];
-				maxpen[0] = maxpen[1] = 0;
-				minsc[0] = minsc[1] = std::numeric_limits<TAlScore>::max();
-				if(bwaSwLike) {
-					// From BWA-SW manual: "Given an l-long query, the
-					// threshold for a hit to be retained is
-					// a*max{T,c*log(l)}."  We try to recreate that here.
-					float a = (float)sc.match(30);
-					float T = bwaSwLikeT, c = bwaSwLikeC;
-					minsc[0] = (TAlScore)max<float>(a*T, a*c*log(rdlens[0]));
+				// Try to align this read
+				while(retry) {
+					retry = false;
+					ca.nextRead(); // clear the cache
+					olm.reads++;
+					assert(!ca.aligning());
+					bool paired = !ps->read_b().empty();
+					const size_t rdlen1 = ps->read_a().length();
+					const size_t rdlen2 = paired ? ps->read_b().length() : 0;
+					olm.bases += (rdlen1 + rdlen2);
+					msinkwrap.nextRead(
+					   &ps->read_a(),
+					   paired ? &ps->read_b() : NULL,
+					   rdid,
+					   sc.qualitiesMatter());
+					assert(msinkwrap.inited());
+					size_t rdlens[2] = { rdlen1, rdlen2 };
+					// Calculate the minimum valid score threshold for the read
+					TAlScore minsc[2], maxpen[2];
+					maxpen[0] = maxpen[1] = 0;
+					minsc[0] = minsc[1] = std::numeric_limits<TAlScore>::max();
+					if(bwaSwLike) {
+						// From BWA-SW manual: "Given an l-long query, the
+						// threshold for a hit to be retained is
+						// a*max{T,c*log(l)}."  We try to recreate that here.
+						float a = (float)sc.match(30);
+						float T = bwaSwLikeT, c = bwaSwLikeC;
+						minsc[0] = (TAlScore)max<float>(a*T, a*c*log(rdlens[0]));
+						if(paired) {
+							minsc[1] = (TAlScore)max<float>(a*T, a*c*log(rdlens[1]));
+						}
+					} else {
+						minsc[0] = scoreMin.f<TAlScore>(rdlens[0]);
+						if(paired) minsc[1] = scoreMin.f<TAlScore>(rdlens[1]);
+						if(localAlign) {
+							if(minsc[0] < 0) {
+								if(!gQuiet) printLocalScoreMsg(*ps, paired, true);
+								minsc[0] = 0;
+							}
+							if(paired && minsc[1] < 0) {
+								if(!gQuiet) printLocalScoreMsg(*ps, paired, false);
+								minsc[1] = 0;
+							}
+						} else {
+							if(minsc[0] > 0) {
+								if(!gQuiet) printEEScoreMsg(*ps, paired, true);
+								minsc[0] = 0;
+							}
+							if(paired && minsc[1] > 0) {
+								if(!gQuiet) printEEScoreMsg(*ps, paired, false);
+								minsc[1] = 0;
+							}
+						}
+					}
+			
+					// N filter; does the read have too many Ns?
+					size_t readns[2] = {0, 0};
+					sc.nFilterPair(
+				       &ps->read_a().patFw,
+				       paired ? &ps->read_b().patFw : NULL,
+				       readns[0],
+				       readns[1],
+				       nfilt[0],
+				       nfilt[1]);
+					// Score filter; does the read enough character to rise above
+					// the score threshold?
+					scfilt[0] = sc.scoreFilter(minsc[0], rdlens[0]);
+					scfilt[1] = sc.scoreFilter(minsc[1], rdlens[1]);
+					lenfilt[0] = lenfilt[1] = true;
+					if(rdlens[0] <= (size_t)multiseedMms || rdlens[0] < 2) {
+						if(!gQuiet) printMmsSkipMsg(*ps, paired, true, multiseedMms);
+						lenfilt[0] = false;
+					}
+					if((rdlens[1] <= (size_t)multiseedMms || rdlens[1] < 2) && paired) {
+						if(!gQuiet) printMmsSkipMsg(*ps, paired, false, multiseedMms);
+						lenfilt[1] = false;
+					}
+					if(rdlens[0] < 2) {
+						if(!gQuiet) printLenSkipMsg(*ps, paired, true);
+						lenfilt[0] = false;
+					}
+					if(rdlens[1] < 2 && paired) {
+						if(!gQuiet) printLenSkipMsg(*ps, paired, false);
+						lenfilt[1] = false;
+					}
+					qcfilt[0] = qcfilt[1] = true;
+					if(qcFilter) {
+						qcfilt[0] = (ps->read_a().filter != '0');
+						qcfilt[1] = (ps->read_b().filter != '0');
+					}
+					filt[0] = (nfilt[0] && scfilt[0] && lenfilt[0] && qcfilt[0]);
+					filt[1] = (nfilt[1] && scfilt[1] && lenfilt[1] && qcfilt[1]);
+					prm.nFilt += (filt[0] ? 0 : 1) + (filt[1] ? 0 : 1);
+					Read* rds[2] = { &ps->read_a(), &ps->read_b() };
+					// For each mate...
+					assert(msinkwrap.empty());
+					//size_t minedfw[2] = { 0, 0 };
+					//size_t minedrc[2] = { 0, 0 };
+					// Calcualte nofw / no rc
+					bool nofw[2] = { false, false };
+					bool norc[2] = { false, false };
+					nofw[0] = paired ? (gMate1fw ? gNofw : gNorc) : gNofw;
+					norc[0] = paired ? (gMate1fw ? gNorc : gNofw) : gNorc;
+					nofw[1] = paired ? (gMate2fw ? gNofw : gNorc) : gNofw;
+					norc[1] = paired ? (gMate2fw ? gNorc : gNofw) : gNorc;
+					// Calculate nceil
+					int nceil[2] = { 0, 0 };
+					nceil[0] = nCeil.f<int>((double)rdlens[0]);
+					nceil[0] = min(nceil[0], (int)rdlens[0]);
 					if(paired) {
-						minsc[1] = (TAlScore)max<float>(a*T, a*c*log(rdlens[1]));
+						nceil[1] = nCeil.f<int>((double)rdlens[1]);
+						nceil[1] = min(nceil[1], (int)rdlens[1]);
 					}
-				} else {
-					minsc[0] = scoreMin.f<TAlScore>(rdlens[0]);
-					if(paired) minsc[1] = scoreMin.f<TAlScore>(rdlens[1]);
-					if(localAlign) {
-						if(minsc[0] < 0) {
-							if(!gQuiet) printLocalScoreMsg(*ps, paired, true);
-							minsc[0] = 0;
-						}
-						if(paired && minsc[1] < 0) {
-							if(!gQuiet) printLocalScoreMsg(*ps, paired, false);
-							minsc[1] = 0;
-						}
+					exhaustive[0] = exhaustive[1] = false;
+					//size_t matemap[2] = { 0, 1 };
+					bool pairPostFilt = filt[0] && filt[1];
+					if(pairPostFilt) {
+						rnd.init(ps->read_a().seed ^ ps->read_b().seed);
 					} else {
-						if(minsc[0] > 0) {
-							if(!gQuiet) printEEScoreMsg(*ps, paired, true);
-							minsc[0] = 0;
+						rnd.init(ps->read_a().seed);
+					}
+					// Calculate interval length for both mates
+					int interval[2] = { 0, 0 };
+					for(size_t mate = 0; mate < (paired ? 2:1); mate++) {
+						interval[mate] = msIval.f<int>((double)rdlens[mate]);
+						if(filt[0] && filt[1]) {
+							// Boost interval length by 20% for paired-end reads
+							interval[mate] = (int)(interval[mate] * 1.2 + 0.5);
 						}
-						if(paired && minsc[1] > 0) {
-							if(!gQuiet) printEEScoreMsg(*ps, paired, false);
-							minsc[1] = 0;
+						interval[mate] = max(interval[mate], 1);
+					}
+					// Calculate streak length
+					size_t streak[2]    = { maxDpStreak,   maxDpStreak };
+					size_t mtStreak[2]  = { maxMateStreak, maxMateStreak };
+					size_t mxDp[2]      = { maxDp,         maxDp       };
+					size_t mxUg[2]      = { maxUg,         maxUg       };
+					size_t mxIter[2]    = { maxIters,      maxIters    };
+					if(allHits) {
+						streak[0]   = streak[1]   = std::numeric_limits<size_t>::max();
+						mtStreak[0] = mtStreak[1] = std::numeric_limits<size_t>::max();
+						mxDp[0]     = mxDp[1]     = std::numeric_limits<size_t>::max();
+						mxUg[0]     = mxUg[1]     = std::numeric_limits<size_t>::max();
+						mxIter[0]   = mxIter[1]   = std::numeric_limits<size_t>::max();
+					} else if(khits > 1) {
+						for(size_t mate = 0; mate < 2; mate++) {
+							streak[mate]   += (khits-1) * maxStreakIncr;
+							mtStreak[mate] += (khits-1) * maxStreakIncr;
+							mxDp[mate]     += (khits-1) * maxItersIncr;
+							mxUg[mate]     += (khits-1) * maxItersIncr;
+							mxIter[mate]   += (khits-1) * maxItersIncr;
 						}
 					}
-				}
-                
-				// N filter; does the read have too many Ns?
-				size_t readns[2] = {0, 0};
-				sc.nFilterPair(
-                               &ps->read_a().patFw,
-                               paired ? &ps->read_b().patFw : NULL,
-                               readns[0],
-                               readns[1],
-                               nfilt[0],
-                               nfilt[1]);
-				// Score filter; does the read enough character to rise above
-				// the score threshold?
-				scfilt[0] = sc.scoreFilter(minsc[0], rdlens[0]);
-				scfilt[1] = sc.scoreFilter(minsc[1], rdlens[1]);
-				lenfilt[0] = lenfilt[1] = true;
-				if(rdlens[0] <= (size_t)multiseedMms || rdlens[0] < 2) {
-					if(!gQuiet) printMmsSkipMsg(*ps, paired, true, multiseedMms);
-					lenfilt[0] = false;
-				}
-				if((rdlens[1] <= (size_t)multiseedMms || rdlens[1] < 2) && paired) {
-					if(!gQuiet) printMmsSkipMsg(*ps, paired, false, multiseedMms);
-					lenfilt[1] = false;
-				}
-				if(rdlens[0] < 2) {
-					if(!gQuiet) printLenSkipMsg(*ps, paired, true);
-					lenfilt[0] = false;
-				}
-				if(rdlens[1] < 2 && paired) {
-					if(!gQuiet) printLenSkipMsg(*ps, paired, false);
-					lenfilt[1] = false;
-				}
-				qcfilt[0] = qcfilt[1] = true;
-				if(qcFilter) {
-					qcfilt[0] = (ps->read_a().filter != '0');
-					qcfilt[1] = (ps->read_b().filter != '0');
-				}
-				filt[0] = (nfilt[0] && scfilt[0] && lenfilt[0] && qcfilt[0]);
-				filt[1] = (nfilt[1] && scfilt[1] && lenfilt[1] && qcfilt[1]);
-				prm.nFilt += (filt[0] ? 0 : 1) + (filt[1] ? 0 : 1);
-				Read* rds[2] = { &ps->read_a(), &ps->read_b() };
-				// For each mate...
-				assert(msinkwrap.empty());
-				//size_t minedfw[2] = { 0, 0 };
-				//size_t minedrc[2] = { 0, 0 };
-				// Calcualte nofw / no rc
-				bool nofw[2] = { false, false };
-				bool norc[2] = { false, false };
-				nofw[0] = paired ? (gMate1fw ? gNofw : gNorc) : gNofw;
-				norc[0] = paired ? (gMate1fw ? gNorc : gNofw) : gNorc;
-				nofw[1] = paired ? (gMate2fw ? gNofw : gNorc) : gNofw;
-				norc[1] = paired ? (gMate2fw ? gNorc : gNofw) : gNorc;
-				// Calculate nceil
-				int nceil[2] = { 0, 0 };
-				nceil[0] = nCeil.f<int>((double)rdlens[0]);
-				nceil[0] = min(nceil[0], (int)rdlens[0]);
-				if(paired) {
-					nceil[1] = nCeil.f<int>((double)rdlens[1]);
-					nceil[1] = min(nceil[1], (int)rdlens[1]);
-				}
-				exhaustive[0] = exhaustive[1] = false;
-				//size_t matemap[2] = { 0, 1 };
-				bool pairPostFilt = filt[0] && filt[1];
-				if(pairPostFilt) {
-					rnd.init(ps->read_a().seed ^ ps->read_b().seed);
-				} else {
-					rnd.init(ps->read_a().seed);
-				}
-				// Calculate interval length for both mates
-				int interval[2] = { 0, 0 };
-				for(size_t mate = 0; mate < (paired ? 2:1); mate++) {
-					interval[mate] = msIval.f<int>((double)rdlens[mate]);
 					if(filt[0] && filt[1]) {
-						// Boost interval length by 20% for paired-end reads
-						interval[mate] = (int)(interval[mate] * 1.2 + 0.5);
+						streak[0] = (size_t)ceil((double)streak[0] / 2.0);
+						streak[1] = (size_t)ceil((double)streak[1] / 2.0);
+						assert_gt(streak[1], 0);
 					}
-					interval[mate] = max(interval[mate], 1);
-				}
-				// Calculate streak length
-				size_t streak[2]    = { maxDpStreak,   maxDpStreak };
-				size_t mtStreak[2]  = { maxMateStreak, maxMateStreak };
-				size_t mxDp[2]      = { maxDp,         maxDp       };
-				size_t mxUg[2]      = { maxUg,         maxUg       };
-				size_t mxIter[2]    = { maxIters,      maxIters    };
-				if(allHits) {
-					streak[0]   = streak[1]   = std::numeric_limits<size_t>::max();
-					mtStreak[0] = mtStreak[1] = std::numeric_limits<size_t>::max();
-					mxDp[0]     = mxDp[1]     = std::numeric_limits<size_t>::max();
-					mxUg[0]     = mxUg[1]     = std::numeric_limits<size_t>::max();
-					mxIter[0]   = mxIter[1]   = std::numeric_limits<size_t>::max();
-				} else if(khits > 1) {
-					for(size_t mate = 0; mate < 2; mate++) {
-						streak[mate]   += (khits-1) * maxStreakIncr;
-						mtStreak[mate] += (khits-1) * maxStreakIncr;
-						mxDp[mate]     += (khits-1) * maxItersIncr;
-						mxUg[mate]     += (khits-1) * maxItersIncr;
-						mxIter[mate]   += (khits-1) * maxItersIncr;
+					assert_gt(streak[0], 0);
+					// Calculate # seed rounds for each mate
+					size_t nrounds[2] = { nSeedRounds, nSeedRounds };
+					if(filt[0] && filt[1]) {
+						nrounds[0] = (size_t)ceil((double)nrounds[0] / 2.0);
+						nrounds[1] = (size_t)ceil((double)nrounds[1] / 2.0);
+						assert_gt(nrounds[1], 0);
 					}
-				}
-				if(filt[0] && filt[1]) {
-					streak[0] = (size_t)ceil((double)streak[0] / 2.0);
-					streak[1] = (size_t)ceil((double)streak[1] / 2.0);
-					assert_gt(streak[1], 0);
-				}
-				assert_gt(streak[0], 0);
-				// Calculate # seed rounds for each mate
-				size_t nrounds[2] = { nSeedRounds, nSeedRounds };
-				if(filt[0] && filt[1]) {
-					nrounds[0] = (size_t)ceil((double)nrounds[0] / 2.0);
-					nrounds[1] = (size_t)ceil((double)nrounds[1] / 2.0);
-					assert_gt(nrounds[1], 0);
-				}
-				assert_gt(nrounds[0], 0);
-				// Increment counters according to what got filtered
-				for(size_t mate = 0; mate < (paired ? 2:1); mate++) {
-					if(!filt[mate]) {
-						// Mate was rejected by N filter
-						olm.freads++;               // reads filtered out
-						olm.fbases += rdlens[mate]; // bases filtered out
-					} else {
-						//shs[mate].clear();
-						//shs[mate].nextRead(mate == 0 ? ps->read_a() : ps->read_b());
-						//assert(shs[mate].empty());
-						olm.ureads++;               // reads passing filter
-						olm.ubases += rdlens[mate]; // bases passing filter
+					assert_gt(nrounds[0], 0);
+					// Increment counters according to what got filtered
+					for(size_t mate = 0; mate < (paired ? 2:1); mate++) {
+						if(!filt[mate]) {
+							// Mate was rejected by N filter
+							olm.freads++;               // reads filtered out
+							olm.fbases += rdlens[mate]; // bases filtered out
+						} else {
+							//shs[mate].clear();
+							//shs[mate].nextRead(mate == 0 ? ps->read_a() : ps->read_b());
+							//assert(shs[mate].empty());
+							olm.ureads++;               // reads passing filter
+							olm.ubases += rdlens[mate]; // bases passing filter
+						}
 					}
+					//size_t eePeEeltLimit = std::numeric_limits<size_t>::max();
+					// Whether we're done with mate1 / mate2
+			bool done[2] = { !filt[0], !filt[1] };
+					// size_t nelt[2] = {0, 0};
+			if(filt[0] && filt[1]) {
+			    splicedAligner.initReads(rds, nofw, norc, minsc, maxpen);
+			} else if(filt[0] || filt[1]) {
+			    splicedAligner.initRead(rds[0], nofw[0], norc[0], minsc[0], maxpen[0], filt[1]);
+			}
+			if(filt[0] || filt[1]) {
+			    int ret = splicedAligner.go(sc, ebwtFw, ebwtBw, ref, sw, *ssdb, wlm, prm, swmSeed, him, rnd, msinkwrap);
+			    MERGE_SW(sw);
+			    // daehwan
+			    size_t mate = 0;
+			    
+			    assert_gt(ret, 0);
+			    // Clear out the exact hits so that we don't try to
+			    // extend them again later!
+			    if(ret == EXTEND_EXHAUSTED_CANDIDATES) {
+				// Not done yet
+			    } else if(ret == EXTEND_POLICY_FULFILLED) {
+				// Policy is satisfied for this mate at least
+				if(msinkwrap.state().doneWithMate(mate == 0)) {
+				    done[mate] = true;
 				}
-				//size_t eePeEeltLimit = std::numeric_limits<size_t>::max();
-				// Whether we're done with mate1 / mate2
-                bool done[2] = { !filt[0], !filt[1] };
-				// size_t nelt[2] = {0, 0};
-                if(filt[0] && filt[1]) {
-                    splicedAligner.initReads(rds, nofw, norc, minsc, maxpen);
-                } else if(filt[0] || filt[1]) {
-                    splicedAligner.initRead(rds[0], nofw[0], norc[0], minsc[0], maxpen[0], filt[1]);
-                }
-                if(filt[0] || filt[1]) {
-                    int ret = splicedAligner.go(sc, ebwtFw, ebwtBw, ref, sw, *ssdb, wlm, prm, swmSeed, him, rnd, msinkwrap);
-                    MERGE_SW(sw);
-                    // daehwan
-                    size_t mate = 0;
-                    
-                    assert_gt(ret, 0);
-                    // Clear out the exact hits so that we don't try to
-                    // extend them again later!
-                    if(ret == EXTEND_EXHAUSTED_CANDIDATES) {
-                        // Not done yet
-                    } else if(ret == EXTEND_POLICY_FULFILLED) {
-                        // Policy is satisfied for this mate at least
-                        if(msinkwrap.state().doneWithMate(mate == 0)) {
-                            done[mate] = true;
-                        }
-                        if(msinkwrap.state().doneWithMate(mate == 1)) {
-                            done[mate^1] = true;
-                        }
-                    } else if(ret == EXTEND_PERFECT_SCORE) {
-                        // We exhausted this mode at least
-                        done[mate] = true;
-                    } else if(ret == EXTEND_EXCEEDED_HARD_LIMIT) {
-                        // We exceeded a per-read limit
-                        done[mate] = true;
-                    } else if(ret == EXTEND_EXCEEDED_SOFT_LIMIT) {
-                        // Not done yet
-                    } else {
-                        //
-                        cerr << "Bad return value: " << ret << endl;
-                        throw 1;
-                    }
-                    if(!done[mate]) {
-                        TAlScore perfectScore = sc.perfectScore(rdlens[mate]);
-                        if(!done[mate] && minsc[mate] == perfectScore) {
-                            done[mate] = true;
-                        }
-                    }
-                }
+				if(msinkwrap.state().doneWithMate(mate == 1)) {
+				    done[mate^1] = true;
+				}
+			    } else if(ret == EXTEND_PERFECT_SCORE) {
+				// We exhausted this mode at least
+				done[mate] = true;
+			    } else if(ret == EXTEND_EXCEEDED_HARD_LIMIT) {
+				// We exceeded a per-read limit
+				done[mate] = true;
+			    } else if(ret == EXTEND_EXCEEDED_SOFT_LIMIT) {
+				// Not done yet
+			    } else {
+				//
+				cerr << "Bad return value: " << ret << endl;
+				throw 1;
+			    }
+			    if(!done[mate]) {
+				TAlScore perfectScore = sc.perfectScore(rdlens[mate]);
+				if(!done[mate] && minsc[mate] == perfectScore) {
+				    done[mate] = true;
+				}
+			    }
+			}
 
-                for(size_t i = 0; i < 2; i++) {
-                    assert_leq(prm.nExIters, mxIter[i]);
-                    assert_leq(prm.nExDps,   mxDp[i]);
-                    assert_leq(prm.nMateDps, mxDp[i]);
-                    assert_leq(prm.nExUgs,   mxUg[i]);
-                    assert_leq(prm.nMateUgs, mxUg[i]);
-                    assert_leq(prm.nDpFail,  streak[i]);
-                    assert_leq(prm.nUgFail,  streak[i]);
-                    assert_leq(prm.nEeFail,  streak[i]);
-                }
-                
-				// Commit and report paired-end/unpaired alignments
-				msinkwrap.finishRead(
-                                     NULL,
-                                     NULL,
-                                     exhaustive[0],        // exhausted seed hits for mate 1?
-                                     exhaustive[1],        // exhausted seed hits for mate 2?
-                                     nfilt[0],
-                                     nfilt[1],
-                                     scfilt[0],
-                                     scfilt[1],
-                                     lenfilt[0],
-                                     lenfilt[1],
-                                     qcfilt[0],
-                                     qcfilt[1],
-                                     sortByScore,          // prioritize by alignment score
-                                     rnd,                  // pseudo-random generator
-                                     rpm,                  // reporting metrics
-                                     prm,                  // per-read metrics
-                                     sc,                   // scoring scheme
-                                     !seedSumm,            // suppress seed summaries?
-                                     seedSumm);            // suppress alignments?
-				assert(!retry || msinkwrap.empty());
-                
-                if(nthreads > 1 && useTempSpliceSite) {
-                    // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
-                    assert_gt(tid, 0);
-                    assert_leq(tid, (int)thread_rids.size());
-                    assert(thread_rids[tid - 1] == 0 || rdid > thread_rids[tid - 1]);
-                    thread_rids[tid - 1] = rdid;
-                }
-			} // while(retry)
-		} // if(rdid >= skipReads && rdid < qUpto)
-		else if(rdid >= qUpto) {
-			break;
-		}
-		if(metricsPerRead) {
-			MERGE_METRICS(metricsPt);
-			nametmp = ps->read_a().name;
-			metricsPt.reportInterval(
-                                     metricsOfb, metricsStderr, true, &nametmp);
-			metricsPt.reset();
-		}
-	} // while(true)
-	
-	// One last metrics merge
-	MERGE_METRICS(metrics);
-    
+			for(size_t i = 0; i < 2; i++) {
+			    assert_leq(prm.nExIters, mxIter[i]);
+			    assert_leq(prm.nExDps,   mxDp[i]);
+			    assert_leq(prm.nMateDps, mxDp[i]);
+			    assert_leq(prm.nExUgs,   mxUg[i]);
+			    assert_leq(prm.nMateUgs, mxUg[i]);
+			    assert_leq(prm.nDpFail,  streak[i]);
+			    assert_leq(prm.nUgFail,  streak[i]);
+			    assert_leq(prm.nEeFail,  streak[i]);
+			}
+			
+					// Commit and report paired-end/unpaired alignments
+					msinkwrap.finishRead(
+					     NULL,
+					     NULL,
+					     exhaustive[0],        // exhausted seed hits for mate 1?
+					     exhaustive[1],        // exhausted seed hits for mate 2?
+					     nfilt[0],
+					     nfilt[1],
+					     scfilt[0],
+					     scfilt[1],
+					     lenfilt[0],
+					     lenfilt[1],
+					     qcfilt[0],
+					     qcfilt[1],
+					     sortByScore,          // prioritize by alignment score
+					     rnd,                  // pseudo-random generator
+					     rpm,                  // reporting metrics
+					     prm,                  // per-read metrics
+					     sc,                   // scoring scheme
+					     !seedSumm,            // suppress seed summaries?
+					     seedSumm);            // suppress alignments?
+					assert(!retry || msinkwrap.empty());
+			
+			if(nthreads > 1 && useTempSpliceSite) {
+			    // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
+			    assert_gt(tid, 0);
+			    assert_leq(tid, (int)thread_rids.size());
+			    assert(thread_rids[tid - 1] == 0 || rdid > thread_rids[tid - 1]);
+			    thread_rids[tid - 1] = rdid;
+			}
+				} // while(retry)
+			} // if(rdid >= skipReads && rdid < qUpto)
+			else if(rdid >= qUpto) {
+				break;
+			}
+			if(metricsPerRead) {
+				MERGE_METRICS(metricsPt);
+				nametmp = ps->read_a().name;
+				metricsPt.reportInterval(
+					     metricsOfb, metricsStderr, true, &nametmp);
+				metricsPt.reset();
+			}
+		} // while(true)
+		
+		// One last metrics merge
+		MERGE_METRICS(metrics);
+	    
 #ifdef PER_THREAD_TIMING
-	ss.str("");
-	ss.clear();
-	ss << "thread: " << tid << " cpu_changeovers: " << ncpu_changeovers << std::endl
-	   << "thread: " << tid << " node_changeovers: " << nnuma_changeovers << std::endl;
-	std::cout << ss.str();
+		ss.str("");
+		ss.clear();
+		ss << "thread: " << tid << " cpu_changeovers: " << ncpu_changeovers << std::endl
+		   << "thread: " << tid << " node_changeovers: " << nnuma_changeovers << std::endl;
+		std::cout << ss.str();
 #endif
-
+	}
 #ifdef WITH_TBB
 	p->done->fetch_and_add(1);
 #endif
