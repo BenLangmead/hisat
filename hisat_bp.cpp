@@ -82,8 +82,8 @@ static bool allHits;      // for multihits, report just one
 static bool showVersion;  // just print version and quit?
 static int ipause;        // pause before maching?
 static uint32_t qUpto;    // max # of queries to read
-int gTrim5;               // amount to trim from 5' end
-int gTrim3;               // amount to trim from 3' end
+static int gTrim5;        // amount to trim from 5' end
+static int gTrim3;        // amount to trim from 3' end
 static int offRate;       // keep default offRate
 static bool solexaQuals;  // quality strings are solexa quals, not phred, and subtract 64 (not 33)
 static bool phred64Quals; // quality chars are phred, but must subtract 64 (not 33)

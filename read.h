@@ -46,6 +46,8 @@ class HitSet;
  */
 struct Read {
 
+	typedef SStringExpandable<char, 1024, 2, 1024> TBuf;
+
 	Read() { reset(); }
 	
 	Read(const char *nm, const char *seq, const char *ql) { init(nm, seq, ql); }
@@ -64,6 +66,7 @@ struct Read {
 		name.clear();
 		filter = '?';
 		seed = 0;
+		parsed = false;
 		ns_ = 0;
 	}
 	
@@ -256,7 +259,7 @@ struct Read {
 	BTString    qualRev;
 
 	// For remembering the exact input text used to define a read
-	SStringExpandable<char, 1024, 2, 1024> readOrigBuf;
+	TBuf readOrigBuf;
 
 	BTString name;      // read name
 	TReadId  rdid;      // 0-based id based on pair's offset in read file(s)
@@ -264,11 +267,28 @@ struct Read {
 	                    // and which mate ("end") this is
 	int      mate;      // 0 = single-end, 1 = mate1, 2 = mate2
 	uint32_t seed;      // random seed
+	bool     parsed;    // true iff read has been fully parsed
 	size_t   ns_;       // # Ns
 	char     filter;    // if read format permits filter char, set it here
 	int      trimmed5;  // amount actually trimmed off 5' end
 	int      trimmed3;  // amount actually trimmed off 3' end
 	HitSet  *hitset;    // holds previously-found hits; for chaining
+};
+
+/**
+ * Pass this around when you want to be able to parse a buffer with data for
+ * many reads in it.  Alows it to be consumed bit by bit with a cursor.
+ */
+struct ParsingCursor {
+	
+	ParsingCursor() : buf(NULL), off(0) { }
+	
+	ParsingCursor(const Read::TBuf* buf_, size_t off_) :
+		buf(buf_),
+		off(off_) { }
+	
+	const Read::TBuf* buf;
+	size_t off;
 };
 
 /**

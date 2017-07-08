@@ -104,8 +104,8 @@ static bool allHits;      // for multihits, report just one
 static bool showVersion;  // just print version and quit?
 static int ipause;        // pause before maching?
 static uint32_t qUpto;    // max # of queries to read
-int gTrim5;               // amount to trim from 5' end
-int gTrim3;               // amount to trim from 3' end
+static int gTrim5;        // amount to trim from 5' end
+static int gTrim3;        // amount to trim from 3' end
 static int offRate;       // keep default offRate
 static bool solexaQuals;  // quality strings are solexa quals, not phred, and subtract 64 (not 33)
 static bool phred64Quals; // quality chars are phred, but must subtract 64 (not 33)
@@ -119,6 +119,8 @@ static int partitionSz;   // output a partitioning key in first field
 static bool useSpinlock;  // false -> don't use of spinlocks even if they're #defines
 static int readsPerBatch; // # reads to read from input file at once
 static int readsPerBatchOutput; // # reads to hold for output
+static int blockBytes;    // bytes in a single input block
+static int readsPerBlock; // # reads in a single input block
 static bool fileParallel; // separate threads read separate input files in parallel
 static bool useShmem;     // use shared memory to hold the index
 static bool useMm;        // use memory-mapped files to hold the index
@@ -329,6 +331,8 @@ static void resetOptions() {
 	partitionSz				= 0;     // output a partitioning key in first field
 	readsPerBatch			= 16;    // # reads to read from input file at once
 	readsPerBatchOutput		= 512; 	 // # reads to store until we flush per-thread output buffer
+	blockBytes				= 65536; // bytes in a single input block
+	readsPerBlock			= 128;   // # reads in a single input block
 	useSpinlock				= true;  // false -> don't use of spinlocks even if they're #defines
 	fileParallel			= false; // separate threads read separate input files in parallel
 	useShmem				= false; // use shared memory to hold the index
@@ -529,6 +533,8 @@ static struct option long_options[] = {
 	{(char*)"version",      no_argument,       0,            ARG_VERSION},
 	{(char*)"reads-per-batch", required_argument, 0,         ARG_READS_PER_BATCH},
 	{(char*)"reads-per-out-batch", required_argument, 0,         ARG_READS_PER_OUT_BATCH},
+	{(char*)"block-bytes",     required_argument, 0,         ARG_BLOCK_BYTES},
+	{(char*)"reads-per-block", required_argument, 0,         ARG_READS_PER_BLOCK},
 	{(char*)"filepar",      no_argument,       0,            ARG_FILEPAR},
 	{(char*)"help",         no_argument,       0,            'h'},
 	{(char*)"threads",      required_argument, 0,            'p'},
@@ -1316,6 +1322,12 @@ static void parseOption(int next_option, const char *arg) {
 			break;
 		case ARG_READS_PER_OUT_BATCH:
 			readsPerBatchOutput = parseInt(1, "--reads-per-out-batch arg must be at least 1", arg);
+			break;
+		case ARG_BLOCK_BYTES:
+			blockBytes = parseInt(1, "--block-bytes arg must be at least 1", arg);
+			break;
+		case ARG_READS_PER_BLOCK:
+			readsPerBlock = parseInt(1, "--reads-per-block arg must be at least 1", arg);
 			break;
 		case ARG_DPAD:
 			maxhalf = parseInt(0, "--dpad must be no less than 0", arg);
@@ -3444,13 +3456,13 @@ static void multiseedSearchWorker_hisat(void *vp) {
 		MERGE_METRICS(metrics);
 	    
 #ifdef PER_THREAD_TIMING
-		ss.str("");
-		ss.clear();
-		ss << "thread: " << tid << " cpu_changeovers: " << ncpu_changeovers << std::endl
-		   << "thread: " << tid << " node_changeovers: " << nnuma_changeovers << std::endl;
-		std::cout << ss.str();
+	ss.str("");
+	ss.clear();
+	ss << "thread: " << tid << " cpu_changeovers: " << ncpu_changeovers << std::endl
+	   << "thread: " << tid << " node_changeovers: " << nnuma_changeovers << std::endl;
+	std::cout << ss.str();
 #endif
-	}
+
 #ifdef WITH_TBB
 	p->done->fetch_and_add(1);
 #endif
@@ -3593,10 +3605,14 @@ static void driver(
 		solexaQuals,   // true -> qualities are on solexa64 scale
 		phred64Quals,  // true -> qualities are on phred64 scale
 		integerQuals,  // true -> qualities are space-separated numbers
+		gTrim5,        // amt to hard clip from 5' end
+		gTrim3,        // amt to hard clip from 3' end
 		fastaContLen,  // length of sampled reads for FastaContinuous...
 		fastaContFreq, // frequency of sampled reads for FastaContinuous...
 		skipReads,     // skip the first 'skip' patterns
 		nthreads,      // # threads
+		blockBytes,    // # bytes in one input block, 0 if we're not using blocked input
+		readsPerBlock, // # reads per input block, 0 if we're not using blockeds input
 		outType != OUTPUT_SAM // whether to fix mate names
 	);
 	if(gVerbose || startVerbose) {
@@ -3608,14 +3624,13 @@ static void driver(
 		mates2,      // mate2's, from -2 arg
 		mates12,     // both mates on each line, from --12 arg
 #ifdef USE_SRA
-        sra_accs,    // SRA accessions
+		sra_accs,    // SRA accessions
 #endif
 		qualities,   // qualities associated with singles
 		qualities1,  // qualities associated with m1
 		qualities2,  // qualities associated with m2
 		pp,          // read read-in parameters
-        nthreads,
-		gVerbose || startVerbose); // be talkative
+		gVerbose || startVerbose); // be talkative	PatternComposer *patsrc = PatternComposer::setupPatternComposer(
 	// Open hit output file
 	if(gVerbose || startVerbose) {
 		cerr << "Opening hit output file: "; logTime(cerr, true);
