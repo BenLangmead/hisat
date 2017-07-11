@@ -175,7 +175,7 @@ pair<bool, bool> PatternSourcePerThread::nextReadPair() {
 		return make_pair(false, false);
 	}
 	// Finalize read/pair
-	if(!buf_.read_b().readOrigBuf.empty()) {
+	if(!buf_.read_b().patFw.empty()) {
 		finalizePair(buf_.read_a(), buf_.read_b());
 	} else {
 		finalize(buf_.read_a());

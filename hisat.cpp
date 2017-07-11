@@ -1324,10 +1324,10 @@ static void parseOption(int next_option, const char *arg) {
 			readsPerBatchOutput = parseInt(1, "--reads-per-out-batch arg must be at least 1", arg);
 			break;
 		case ARG_BLOCK_BYTES:
-			blockBytes = parseInt(1, "--block-bytes arg must be at least 1", arg);
+			blockBytes = parseInt(0, "--block-bytes arg must be non-negative", arg);
 			break;
 		case ARG_READS_PER_BLOCK:
-			readsPerBlock = parseInt(1, "--reads-per-block arg must be at least 1", arg);
+			readsPerBlock = parseInt(0, "--reads-per-block arg must be non-negative", arg);
 			break;
 		case ARG_DPAD:
 			maxhalf = parseInt(0, "--dpad must be no less than 0", arg);
@@ -2935,6 +2935,7 @@ static void multiseedSearchWorker_hisat(void *vp) {
 static void multiseedSearchWorker_hisat(void *vp) {
     int tid = *((int*)vp);
 #endif
+	assert_lt(tid, nthreads);
 	assert(multiseed_ebwtFw != NULL);
 	assert(multiseedMms == 0 || multiseed_ebwtBw != NULL);
 	PatternComposer&                 patsrc   = *multiseed_patsrc;
@@ -3092,6 +3093,8 @@ static void multiseedSearchWorker_hisat(void *vp) {
 				continue;
 			}
 			TReadId rdid = ps->read_a().rdid;
+			assert(!ps->read_a().patFw.empty());
+			assert(!ps->read_a().patRc.empty());
 		
 		if(nthreads > 1 && useTempSpliceSite) {
 		    while(true) {
@@ -3433,10 +3436,10 @@ static void multiseedSearchWorker_hisat(void *vp) {
 			
 			if(nthreads > 1 && useTempSpliceSite) {
 			    // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
-			    assert_gt(tid, 0);
-			    assert_leq(tid, (int)thread_rids.size());
-			    assert(thread_rids[tid - 1] == 0 || rdid > thread_rids[tid - 1]);
-			    thread_rids[tid - 1] = rdid;
+			    assert_geq(tid, 0);
+			    assert_lt(tid, (int)thread_rids.size());
+			    assert(thread_rids[tid] == 0 || rdid > thread_rids[tid]);
+			    thread_rids[tid] = rdid;
 			}
 				} // while(retry)
 			} // if(rdid >= skipReads && rdid < qUpto)
@@ -3548,7 +3551,6 @@ static void multiseedSearch(
 
 		for(int i = 0; i < nthreads; i++) {
 #ifdef WITH_TBB
-		    //tbb_grp.run(multiseedSearchWorker_hisat(i+1));
 			thread_tracking_pair tp;
 			tp.tid = i;
 			tp.done = &all_threads_done;
@@ -3559,7 +3561,7 @@ static void multiseedSearch(
 		while(all_threads_done < nthreads);
 #else
 			// Thread IDs start at 1
-			tids[i] = i+1;
+			tids[i] = i;
 			threads[i] = new tthread::thread(multiseedSearchWorker_hisat, (void*)&tids[i]);
 		}
 		for (int i = 0; i < nthreads; i++)
