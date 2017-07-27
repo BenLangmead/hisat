@@ -3096,29 +3096,29 @@ static void multiseedSearchWorker_hisat(void *vp) {
 			assert(!ps->read_a().patFw.empty());
 			assert(!ps->read_a().patRc.empty());
 		
-		if(nthreads > 1 && useTempSpliceSite) {
-		    while(true) {
-			uint64_t min_rdid = 0;
-			{
-			    // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
-			    assert_gt(thread_rids.size(), 0);
-			    min_rdid = thread_rids[0];
-			    for(size_t i = 1; i < thread_rids.size(); i++) {
-				if(thread_rids[i] < min_rdid) {
-				    min_rdid = thread_rids[i];
-				}
-			    }
-			}
+			if(nthreads > 1 && useTempSpliceSite) {
+				while(true) {
+					uint64_t min_rdid = 0;
+					{
+						// ThreadSafe t(&thread_rids_mutex, nthreads > 1);
+						assert_gt(thread_rids.size(), 0);
+						min_rdid = thread_rids[0];
+						for(size_t i = 1; i < thread_rids.size(); i++) {
+							if(thread_rids[i] < min_rdid) {
+								min_rdid = thread_rids[i];
+							}
+						}
+					}
 			
-			if(min_rdid + thread_rids_mindist < rdid) {
+					if(min_rdid + thread_rids_mindist < rdid) {
 #if defined(_TTHREAD_WIN32_)
-			    Sleep(0);
+						Sleep(0);
 #elif defined(_TTHREAD_POSIX_)
-			    sched_yield();
+						sched_yield();
 #endif
-			} else break;
-		    }
-		}
+					} else break;
+				}
+			}
 		
 			bool sample = true;
 			if(arbitraryRandom) {
@@ -3353,63 +3353,63 @@ static void multiseedSearchWorker_hisat(void *vp) {
 					}
 					//size_t eePeEeltLimit = std::numeric_limits<size_t>::max();
 					// Whether we're done with mate1 / mate2
-			bool done[2] = { !filt[0], !filt[1] };
+					bool done[2] = { !filt[0], !filt[1] };
 					// size_t nelt[2] = {0, 0};
-			if(filt[0] && filt[1]) {
-			    splicedAligner.initReads(rds, nofw, norc, minsc, maxpen);
-			} else if(filt[0] || filt[1]) {
-			    splicedAligner.initRead(rds[0], nofw[0], norc[0], minsc[0], maxpen[0], filt[1]);
-			}
-			if(filt[0] || filt[1]) {
-			    int ret = splicedAligner.go(sc, ebwtFw, ebwtBw, ref, sw, *ssdb, wlm, prm, swmSeed, him, rnd, msinkwrap);
-			    MERGE_SW(sw);
-			    // daehwan
-			    size_t mate = 0;
-			    
-			    assert_gt(ret, 0);
-			    // Clear out the exact hits so that we don't try to
-			    // extend them again later!
-			    if(ret == EXTEND_EXHAUSTED_CANDIDATES) {
-				// Not done yet
-			    } else if(ret == EXTEND_POLICY_FULFILLED) {
-				// Policy is satisfied for this mate at least
-				if(msinkwrap.state().doneWithMate(mate == 0)) {
-				    done[mate] = true;
-				}
-				if(msinkwrap.state().doneWithMate(mate == 1)) {
-				    done[mate^1] = true;
-				}
-			    } else if(ret == EXTEND_PERFECT_SCORE) {
-				// We exhausted this mode at least
-				done[mate] = true;
-			    } else if(ret == EXTEND_EXCEEDED_HARD_LIMIT) {
-				// We exceeded a per-read limit
-				done[mate] = true;
-			    } else if(ret == EXTEND_EXCEEDED_SOFT_LIMIT) {
-				// Not done yet
-			    } else {
-				//
-				cerr << "Bad return value: " << ret << endl;
-				throw 1;
-			    }
-			    if(!done[mate]) {
-				TAlScore perfectScore = sc.perfectScore(rdlens[mate]);
-				if(!done[mate] && minsc[mate] == perfectScore) {
-				    done[mate] = true;
-				}
-			    }
-			}
+					if(filt[0] && filt[1]) {
+						splicedAligner.initReads(rds, nofw, norc, minsc, maxpen);
+					} else if(filt[0] || filt[1]) {
+						splicedAligner.initRead(rds[0], nofw[0], norc[0], minsc[0], maxpen[0], filt[1]);
+					}
+					if(filt[0] || filt[1]) {
+						int ret = splicedAligner.go(sc, ebwtFw, ebwtBw, ref, sw, *ssdb, wlm, prm, swmSeed, him, rnd, msinkwrap);
+						MERGE_SW(sw);
+						// daehwan
+						size_t mate = 0;
 
-			for(size_t i = 0; i < 2; i++) {
-			    assert_leq(prm.nExIters, mxIter[i]);
-			    assert_leq(prm.nExDps,   mxDp[i]);
-			    assert_leq(prm.nMateDps, mxDp[i]);
-			    assert_leq(prm.nExUgs,   mxUg[i]);
-			    assert_leq(prm.nMateUgs, mxUg[i]);
-			    assert_leq(prm.nDpFail,  streak[i]);
-			    assert_leq(prm.nUgFail,  streak[i]);
-			    assert_leq(prm.nEeFail,  streak[i]);
-			}
+						assert_gt(ret, 0);
+						// Clear out the exact hits so that we don't try to
+						// extend them again later!
+						if(ret == EXTEND_EXHAUSTED_CANDIDATES) {
+							// Not done yet
+						} else if(ret == EXTEND_POLICY_FULFILLED) {
+							// Policy is satisfied for this mate at least
+							if(msinkwrap.state().doneWithMate(mate == 0)) {
+								done[mate] = true;
+							}
+							if(msinkwrap.state().doneWithMate(mate == 1)) {
+								done[mate^1] = true;
+							}
+						} else if(ret == EXTEND_PERFECT_SCORE) {
+							// We exhausted this mode at least
+							done[mate] = true;
+						} else if(ret == EXTEND_EXCEEDED_HARD_LIMIT) {
+							// We exceeded a per-read limit
+							done[mate] = true;
+						} else if(ret == EXTEND_EXCEEDED_SOFT_LIMIT) {
+							// Not done yet
+						} else {
+							//
+							cerr << "Bad return value: " << ret << endl;
+							throw 1;
+						}
+						if(!done[mate]) {
+							TAlScore perfectScore = sc.perfectScore(rdlens[mate]);
+							if(!done[mate] && minsc[mate] == perfectScore) {
+								done[mate] = true;
+							}
+						}
+					} // if(filt[0] || filt[1])
+
+					for(size_t i = 0; i < 2; i++) {
+						assert_leq(prm.nExIters, mxIter[i]);
+						assert_leq(prm.nExDps,   mxDp[i]);
+						assert_leq(prm.nMateDps, mxDp[i]);
+						assert_leq(prm.nExUgs,   mxUg[i]);
+						assert_leq(prm.nMateUgs, mxUg[i]);
+						assert_leq(prm.nDpFail,  streak[i]);
+						assert_leq(prm.nUgFail,  streak[i]);
+						assert_leq(prm.nEeFail,  streak[i]);
+					}
 			
 					// Commit and report paired-end/unpaired alignments
 					msinkwrap.finishRead(
@@ -3434,13 +3434,13 @@ static void multiseedSearchWorker_hisat(void *vp) {
 					     seedSumm);            // suppress alignments?
 					assert(!retry || msinkwrap.empty());
 			
-			if(nthreads > 1 && useTempSpliceSite) {
-			    // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
-			    assert_geq(tid, 0);
-			    assert_lt(tid, (int)thread_rids.size());
-			    assert(thread_rids[tid] == 0 || rdid > thread_rids[tid]);
-			    thread_rids[tid] = rdid;
-			}
+					if(nthreads > 1 && useTempSpliceSite) {
+						// ThreadSafe t(&thread_rids_mutex, nthreads > 1);
+						assert_geq(tid, 0);
+						assert_lt(tid, (int)thread_rids.size());
+						assert(thread_rids[tid] == 0 || rdid > thread_rids[tid]);
+						thread_rids[tid] = rdid;
+					}
 				} // while(retry)
 			} // if(rdid >= skipReads && rdid < qUpto)
 			else if(rdid >= qUpto) {
@@ -3453,17 +3453,18 @@ static void multiseedSearchWorker_hisat(void *vp) {
 					     metricsOfb, metricsStderr, true, &nametmp);
 				metricsPt.reset();
 			}
-		} // while(true)
-		
+		} // while(!done)
+	
 		// One last metrics merge
 		MERGE_METRICS(metrics);
-	    
+
 #ifdef PER_THREAD_TIMING
-	ss.str("");
-	ss.clear();
-	ss << "thread: " << tid << " cpu_changeovers: " << ncpu_changeovers << std::endl
-	   << "thread: " << tid << " node_changeovers: " << nnuma_changeovers << std::endl;
-	std::cout << ss.str();
+		ss.str("");
+		ss.clear();
+		ss << "thread: " << tid << " cpu_changeovers: " << ncpu_changeovers << std::endl
+		   << "thread: " << tid << " node_changeovers: " << nnuma_changeovers << std::endl;
+		std::cout << ss.str();
+	}
 #endif
 
 #ifdef WITH_TBB
