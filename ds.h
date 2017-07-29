@@ -790,7 +790,7 @@ public:
 	void sortPortion(size_t begin, size_t num) {
 		assert_leq(begin+num, cur_);
 		if(num < 2) return;
-		std::sort(list_ + begin, list_ + begin + num);
+		std::stable_sort(list_ + begin, list_ + begin + num);
 	}
 	
 	/**
@@ -3077,7 +3077,7 @@ public:
 	 * Free each page.
 	 */
 	~Pool() {
-		delete super_pages;
+		delete[] super_pages;
 		for(size_t i = 0; i < pages_.size(); i++) {
 #ifdef USE_MEM_TALLY
 			gMemTally.del(cat_, pagesz_);

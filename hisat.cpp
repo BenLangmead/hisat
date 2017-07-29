@@ -3433,14 +3433,12 @@ static void multiseedSearchWorker_hisat(void *vp) {
 					     !seedSumm,            // suppress seed summaries?
 					     seedSumm);            // suppress alignments?
 					assert(!retry || msinkwrap.empty());
-			
-					if(nthreads > 1 && useTempSpliceSite) {
-						// ThreadSafe t(&thread_rids_mutex, nthreads > 1);
-						assert_geq(tid, 0);
-						assert_lt(tid, (int)thread_rids.size());
-						assert(thread_rids[tid] == 0 || rdid > thread_rids[tid]);
-						thread_rids[tid] = rdid;
-					}
+			if(nthreads > 1 && useTempSpliceSite) {
+			    // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
+			    assert_lt(tid, (int)thread_rids.size());
+			    assert(thread_rids[tid] == 0 || rdid > thread_rids[tid]);
+			    thread_rids[tid] = rdid;
+			}
 				} // while(retry)
 			} // if(rdid >= skipReads && rdid < qUpto)
 			else if(rdid >= qUpto) {
@@ -3561,9 +3559,13 @@ static void multiseedSearch(
 			tids[i] = i;
 			threads[i] = new tthread::thread(multiseedSearchWorker_hisat, (void*)&tids[i]);
 		}
-		for (int i = 0; i < nthreads; i++)
+		for (int i = 0; i < nthreads; i++) {
 			threads[i]->join();
+		}
 #endif
+		for (int i = 0; i < nthreads; i++) {
+			delete threads[i];
+		}
 	}
 	if(!metricsPerRead && (metricsOfb != NULL || metricsStderr)) {
 		metrics.reportInterval(metricsOfb, metricsStderr, true, NULL);

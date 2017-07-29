@@ -49,8 +49,6 @@ public:
 		TReadId rdid = 0) :
 		obuf_(obuf),
 		cur_(rdid),
-		nfinished_(0),
-		nflushed_(0),
 		lines_(RES_CAT),
 		started_(RES_CAT),
 		finished_(RES_CAT),
@@ -58,27 +56,42 @@ public:
 		threadSafe_(threadSafe),
 		mutex_m(),
 		nthreads_(nthreads),
+		perThreadBuf_(NULL),
+		perThreadCounter_(NULL),
+		perThreadStarted_(NULL),
+		perThreadFinished_(NULL),
+		perThreadFlushed_(NULL),
 		perThreadBufSize_(perThreadBufSize)
 	{
-		nstarted_=0;
-		assert(nthreads_ <= 1 || threadSafe);
-		if(!reorder)
-		{
-			//fprintf(stderr,"perThreadBufSize for output is %d\n",perThreadBufSize_);
-			perThreadBuf = new BTString*[nthreads_];
-			perThreadCounter = new int[nthreads_];
-			size_t i = 0;
-			for(i=0;i<nthreads_;i++)
-			{
-				perThreadBuf[i] = new BTString[perThreadBufSize_];
-				perThreadCounter[i] = 0;
-			}
+		assert_gt(nthreads_, 0);
+		assert(nthreads_ == 1 || threadSafe);
+		perThreadBuf_ = new BTString*[nthreads_];
+		perThreadCounter_ = new int[nthreads_ * 4];
+		perThreadStarted_ = perThreadCounter_ + nthreads_;
+		perThreadFinished_ = perThreadStarted_ + nthreads_;
+		perThreadFlushed_ = perThreadFinished_ + nthreads_;
+		for(size_t i = 0; i < nthreads_; i++) {
+			perThreadBuf_[i] = new BTString[perThreadBufSize_];
+			perThreadCounter_[i] = 0;
+			perThreadStarted_[i] = 0;
+			perThreadFinished_[i] = 0;
+			perThreadFlushed_[i] = 0;
 		}
 	}
 
-	~OutputQueue() { }
-			
-		
+	~OutputQueue() {
+		if(perThreadBuf_ != NULL) {
+			for(size_t i = 0; i < nthreads_; i++) {
+				delete[] perThreadBuf_[i];
+			}
+			delete[] perThreadBuf_;
+			perThreadBuf_ = NULL;
+		}
+		if(perThreadCounter_ != NULL) {
+			delete[] perThreadCounter_;
+			perThreadCounter_ = NULL;
+		}
+	}
 
 	/**
 	 * Caller is telling us that they're about to write output record(s) for
@@ -102,21 +115,33 @@ public:
 	 * Return the number of records that have been flushed so far.
 	 */
 	TReadId numFlushed() const {
-		return nflushed_;
+		TReadId tot = 0;
+		for(size_t i = 0; i < nthreads_; i++) {
+			tot += perThreadFlushed_[i];
+		}
+		return tot;
 	}
 
 	/**
 	 * Return the number of records that have been started so far.
 	 */
 	TReadId numStarted() const {
-		return nstarted_;
+		TReadId tot = 0;
+		for(size_t i = 0; i < nthreads_; i++) {
+			tot += perThreadStarted_[i];
+		}
+		return tot;
 	}
 
 	/**
 	 * Return the number of records that have been finished so far.
 	 */
 	TReadId numFinished() const {
-		return nfinished_;
+		TReadId tot = 0;
+		for(size_t i = 0; i < nthreads_; i++) {
+			tot += perThreadFinished_[i];
+		}
+		return tot;
 	}
 
 	/**
@@ -128,13 +153,6 @@ protected:
 
 	OutFileBuf&     obuf_;
 	TReadId         cur_;
-#ifdef WITH_TBB
-	tbb::atomic<TReadId> nstarted_;
-#else
-	TReadId         nstarted_;
-#endif
-	TReadId         nfinished_;
-	TReadId         nflushed_;
 	EList<BTString> lines_;
 	EList<bool>     started_;
 	EList<bool>     finished_;
@@ -143,8 +161,11 @@ protected:
 	MUTEX_T         mutex_m;
 	
 	size_t nthreads_;
-	BTString**	perThreadBuf;
-	int* 		perThreadCounter;
+	BTString** perThreadBuf_;
+	int* perThreadCounter_;
+	int* perThreadStarted_;
+	int* perThreadFinished_;
+	int* perThreadFlushed_;
 	int perThreadBufSize_;
 
 private:
