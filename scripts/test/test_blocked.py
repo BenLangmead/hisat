@@ -23,7 +23,7 @@ def parse(readlen):
                 reads.append([nm, seq, nm2, qual, len(nm) + len(seq) + len(nm2) + len(qual) + 4])
     return reads1, reads2
 
-for block_sz, read_len in itertools.product([0, 400, 1600, 6000, 12000], [30, 50, 100]):
+for block_sz, read_len in itertools.product([0], [30, 50, 100]):
     reads1, reads2 = parse(read_len)
     reads_per_block = int(block_sz / (read_len * 4))
     lab = '%d_%d' % (block_sz, read_len)
@@ -52,11 +52,11 @@ for block_sz, read_len in itertools.product([0, 400, 1600, 6000, 12000], [30, 50
                     for rd in block_reads2:
                         ofh2.write(b'\n'.join(rd[:4]) + b'\n')
                     block_i += reads_per_block
-    for nthreads in [1, 8]:
+    for nthreads in [1, 4, 8]:
         osamfn = 'reads_%s_p%d.sam' % (lab, nthreads)
-        cmd = './hisat -p %d --no-hd --no-spliced-alignment --no-temp-splicesite --reads-per-block %d ' \
-            '--block-bytes %d -x example/index/lambda_virus -1 %s -2 %s | sort > %s' % \
-            (nthreads, reads_per_block, block_sz, ofn1, ofn2, osamfn)
+        cmd = './hisat -p %d --no-hd --no-spliced-alignment --no-temp-splicesite ' \
+            '-x example/index/lambda_virus -1 %s -2 %s | sort > %s' % \
+            (nthreads, ofn1, ofn2, osamfn)
         print(cmd, file=sys.stderr)
         ret = os.system(cmd)
         if ret != 0:
