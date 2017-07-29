@@ -3421,10 +3421,9 @@ static void multiseedSearchWorker_hisat(void *vp) {
 			
 			if(nthreads > 1 && useTempSpliceSite) {
 			    // ThreadSafe t(&thread_rids_mutex, nthreads > 1);
-			    assert_gt(tid, 0);
-			    assert_leq(tid, (int)thread_rids.size());
-			    assert(thread_rids[tid - 1] == 0 || rdid > thread_rids[tid - 1]);
-			    thread_rids[tid - 1] = rdid;
+			    assert_lt(tid, (int)thread_rids.size());
+			    assert(thread_rids[tid] == 0 || rdid > thread_rids[tid]);
+			    thread_rids[tid] = rdid;
 			}
 				} // while(retry)
 			} // if(rdid >= skipReads && rdid < qUpto)
@@ -3543,12 +3542,16 @@ static void multiseedSearch(
 		}
 #else
 			// Thread IDs start at 1
-			tids[i] = i+1;
+			tids[i] = i;
 			threads[i] = new tthread::thread(multiseedSearchWorker_hisat, (void*)&tids[i]);
 		}
-		for (int i = 0; i < nthreads; i++)
+		for (int i = 0; i < nthreads; i++) {
 			threads[i]->join();
+		}
 #endif
+		for (int i = 0; i < nthreads; i++) {
+			delete threads[i];
+		}
 	}
 	if(!metricsPerRead && (metricsOfb != NULL || metricsStderr)) {
 		metrics.reportInterval(metricsOfb, metricsStderr, true, NULL);
