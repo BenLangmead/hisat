@@ -25,6 +25,7 @@
  */
 void OutputQueue::beginReadImpl(TReadId rdid, size_t threadId) {
 	assert_lt(threadId, nthreads_);
+	assert_leq(perThreadCounter_[threadId], perThreadBufSize_);
 	perThreadStarted_[threadId]++;
 	if(reorder_) {
 		assert_geq(rdid, cur_);
@@ -73,10 +74,14 @@ void OutputQueue::finishReadImpl(const BTString& rec, TReadId rdid, size_t threa
 	} else {
 		perThreadFinished_[threadId]++;
 		if(perThreadCounter_[threadId] >= perThreadBufSize_) {
-			for(int i = 0; i < perThreadBufSize_; i++) {
-				obuf_.writeString(perThreadBuf_[threadId][i]);
-				perThreadFlushed_[threadId]++;
+			assert_eq(perThreadCounter_[threadId], perThreadBufSize_);
+			{
+				ThreadSafe ts(mutex_m)
+				for(int i = 0; i < perThreadBufSize_; i++) {
+					obuf_.writeString(perThreadBuf_[threadId][i]);
+				}
 			}
+			perThreadFlushed_[threadId] += perThreadBufSize_;
 			perThreadCounter_[threadId] = 0;
 		}
 		perThreadBuf_[threadId][perThreadCounter_[threadId]++] = rec;
@@ -98,11 +103,11 @@ void OutputQueue::finishRead(const BTString& rec, TReadId rdid, size_t threadId)
  */
 void OutputQueue::flushImpl(bool force) {
 	if(!reorder_) {
-		for(size_t i = 0;i < nthreads_; i++) {
+		for(size_t i = 0; i < nthreads_; i++) {
 			for(int j = 0; j < perThreadCounter_[i]; j++) {
 				obuf_.writeString(perThreadBuf_[i][j]);
-				perThreadFlushed_[i]++;
 			}
+			perThreadFlushed_[i] += perThreadCounter_[i];
 			perThreadCounter_[i] = 0;
 		}
 		return;
