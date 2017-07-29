@@ -55,7 +55,7 @@ for block_sz, read_len in itertools.product([0, 400, 1600, 6000, 12000], [30, 50
     for nthreads in [1, 8]:
         osamfn = 'reads_%s_p%d.sam' % (lab, nthreads)
         cmd = './hisat -p %d --no-hd --no-spliced-alignment --no-temp-splicesite --reads-per-block %d ' \
-            '--block-bytes %d -x example/index/lambda_virus -1 %s -2 %s -S %s' % \
+            '--block-bytes %d -x example/index/lambda_virus -1 %s -2 %s | sort > %s' % \
             (nthreads, reads_per_block, block_sz, ofn1, ofn2, osamfn)
         print(cmd, file=sys.stderr)
         ret = os.system(cmd)
