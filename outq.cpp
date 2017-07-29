@@ -76,7 +76,7 @@ void OutputQueue::finishReadImpl(const BTString& rec, TReadId rdid, size_t threa
 		if(perThreadCounter_[threadId] >= perThreadBufSize_) {
 			assert_eq(perThreadCounter_[threadId], perThreadBufSize_);
 			{
-				ThreadSafe ts(mutex_m)
+				ThreadSafe ts(mutex_m);
 				for(int i = 0; i < perThreadBufSize_; i++) {
 					obuf_.writeString(perThreadBuf_[threadId][i]);
 				}
