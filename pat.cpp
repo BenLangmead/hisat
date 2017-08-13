@@ -973,7 +973,7 @@ pair<bool, int> FastqPatternSource::nextBatchFromFile(
 				}
 			}
 		} else {
-			for(int i = 0; i < pp_.block_bytes; i++) {
+			for(; i < pp_.block_bytes; i++) {
 				// Round EOF up to 0 for now. Keeps the loop simple and won't
 				// make a difference later when we count newlines or otherwise
 				// parse the buffer.
