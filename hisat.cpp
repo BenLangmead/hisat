@@ -3589,6 +3589,7 @@ static void driver(
 		fileParallel,  // true -> wrap files with separate PairedPatternSources
 		seed,          // pseudo-random seed
 		readsPerBatch, // # reads in a light parsing batch
+		io_buffer_size, // size reads to use when reading input
 		solexaQuals,   // true -> qualities are on solexa64 scale
 		phred64Quals,  // true -> qualities are on phred64 scale
 		integerQuals,  // true -> qualities are space-separated numbers

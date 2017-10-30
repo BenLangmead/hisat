@@ -3465,6 +3465,8 @@ static void driver(
 		format,        // file format
 		fileParallel,  // true -> wrap files with separate PairedPatternSources
 		seed,          // pseudo-random seed
+		readsPerBatch, // # reads in a light parsing batch
+		io_buffer_size, // size reads to use when reading input
 		useSpinlock,   // use spin locks instead of pthreads
 		solexaQuals,   // true -> qualities are on solexa64 scale
 		phred64Quals,  // true -> qualities are on phred64 scale

@@ -57,6 +57,7 @@ struct PatternParams {
 		bool fileParallel_,
 		uint32_t seed_,
 		size_t max_buf_,
+		size_t buffer_sz_,
 		bool solexa64_,
 		bool phred64_,
 		bool intQuals_,
@@ -69,6 +70,7 @@ struct PatternParams {
 		fileParallel(fileParallel_),
 		seed(seed_),
 		max_buf(max_buf_),
+		buffer_sz(buffer_sz_),
 		solexa64(solexa64_),
 		phred64(phred64_),
 		intQuals(intQuals_),
@@ -82,6 +84,7 @@ struct PatternParams {
 	bool fileParallel;    // true -> wrap files with separate PatternComposers
 	uint32_t seed;        // pseudo-random seed
 	size_t max_buf;       // number of reads to buffer in one read
+	size_t buffer_sz;     // input buffer size
 	bool solexa64;        // true -> qualities are on solexa64 scale
 	bool phred64;         // true -> qualities are on phred64 scale
 	bool intQuals;        // true -> qualities are space-separated numbers
@@ -424,11 +427,14 @@ public:
 		fp_(NULL),
 		is_open_(false),
 		skip_(p.skip),
-		first_(true)
+		first_(true),
+		buf_(NULL),
+		buffer_sz_(p.buffer_sz)
 	{
 		assert_gt(infiles.size(), 0);
 		errs_.resize(infiles_.size());
 		errs_.fill(0, infiles_.size(), false);
+		buf_ = new char[buffer_sz_];
 		open(); // open first file in the list
 		filecur_++;
 	}
@@ -437,6 +443,10 @@ public:
 		if(is_open_) {
 			assert(fp_ != NULL);
 			fclose(fp_);
+		}
+		if(buf_ != NULL) {
+			delete[] buf_;
+			buf_ = NULL;
 		}
 	}
 	
@@ -489,7 +499,8 @@ protected:
 	bool is_open_;           // whether fp_ is currently open
 	TReadId skip_;           // number of reads to skip
 	bool first_;             // parsing first record in first file?
-	char buf_[64*1024];      // file buffer
+	char *buf_;              // read buffer
+	size_t buffer_sz_; // buffer size for use w/ setvbuf/gzbuffer
 
 private:
 
