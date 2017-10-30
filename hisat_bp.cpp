@@ -296,7 +296,7 @@ static void resetOptions() {
 	partitionSz				= 0;     // output a partitioning key in first field
 	useSpinlock				= true;  // false -> don't use of spinlocks even if they're #defines
 	fileParallel			= false; // separate threads read separate input files in parallel
-	io_buffer_size			= 64*1024; // for setvbuf on input/output stream
+	io_buffer_size			= 512*1024; // for setvbuf on input/output stream
 	useShmem				= false; // use shared memory to hold the index
 	useMm					= false; // use memory-mapped files to hold the index
 	mmSweep					= false; // sweep through memory-mapped files immediately after mapping
