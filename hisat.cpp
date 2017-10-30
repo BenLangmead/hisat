@@ -118,10 +118,10 @@ static uint32_t mhits;    // don't report any hits if there are > mhits
 static int partitionSz;   // output a partitioning key in first field
 static bool useSpinlock;  // false -> don't use of spinlocks even if they're #defines
 static int readsPerBatch; // # reads to read from input file at once
-static int readsPerBatchOutput; // # reads to hold for output
 static int blockBytes;    // bytes in a single input block
 static int readsPerBlock; // # reads in a single input block
 static bool fileParallel; // separate threads read separate input files in parallel
+static size_t io_buffer_size; // for setvbuf on input stream
 static bool useShmem;     // use shared memory to hold the index
 static bool useMm;        // use memory-mapped files to hold the index
 static bool mmSweep;      // sweep through memory-mapped files immediately after mapping
@@ -330,11 +330,11 @@ static void resetOptions() {
 	mhits					= 0;     // stop after finding this many alignments+1
 	partitionSz				= 0;     // output a partitioning key in first field
 	readsPerBatch			= 16;    // # reads to read from input file at once
-	readsPerBatchOutput		= 512; 	 // # reads to store until we flush per-thread output buffer
 	blockBytes				= 65536; // bytes in a single input block
 	readsPerBlock			= 128;   // # reads in a single input block
 	useSpinlock				= true;  // false -> don't use of spinlocks even if they're #defines
 	fileParallel			= false; // separate threads read separate input files in parallel
+	io_buffer_size			= 64*1024; // for setvbuf on input/output stream
 	useShmem				= false; // use shared memory to hold the index
 	useMm					= false; // use memory-mapped files to hold the index
 	mmSweep					= false; // sweep through memory-mapped files immediately after mapping
@@ -532,10 +532,10 @@ static struct option long_options[] = {
 	{(char*)"upto",         required_argument, 0,            'u'},
 	{(char*)"version",      no_argument,       0,            ARG_VERSION},
 	{(char*)"reads-per-batch", required_argument, 0,         ARG_READS_PER_BATCH},
-	{(char*)"reads-per-out-batch", required_argument, 0,         ARG_READS_PER_OUT_BATCH},
 	{(char*)"block-bytes",     required_argument, 0,         ARG_BLOCK_BYTES},
 	{(char*)"reads-per-block", required_argument, 0,         ARG_READS_PER_BLOCK},
 	{(char*)"filepar",      no_argument,       0,            ARG_FILEPAR},
+	{(char*)"buffer-size",  required_argument, 0,            ARG_BUFFER_SIZE},
 	{(char*)"help",         no_argument,       0,            'h'},
 	{(char*)"threads",      required_argument, 0,            'p'},
 	{(char*)"khits",        required_argument, 0,            'k'},
@@ -1151,6 +1151,9 @@ static void parseOption(int next_option, const char *arg) {
 		case ARG_FILEPAR:
 			fileParallel = true;
 			break;
+		case ARG_BUFFER_SIZE:
+			io_buffer_size = parseInt(1024, "--buffer-size arg must be at least 1024", arg);
+			break;
 		case '3': gTrim3 = parseInt(0, "-3/--trim3 arg must be at least 0", arg); break;
 		case '5': gTrim5 = parseInt(0, "-5/--trim5 arg must be at least 0", arg); break;
 		case 'h': printUsage(cout); throw 0; break;
@@ -1319,9 +1322,6 @@ static void parseOption(int next_option, const char *arg) {
 		case ARG_PARTITION: partitionSz = parse<int>(arg); break;
 		case ARG_READS_PER_BATCH:
 			readsPerBatch = parseInt(1, "--reads-per-batch arg must be at least 1", arg);
-			break;
-		case ARG_READS_PER_OUT_BATCH:
-			readsPerBatchOutput = parseInt(1, "--reads-per-out-batch arg must be at least 1", arg);
 			break;
 		case ARG_BLOCK_BYTES:
 			blockBytes = parseInt(0, "--block-bytes arg must be non-negative", arg);
@@ -3636,12 +3636,6 @@ static void driver(
 	if(gVerbose || startVerbose) {
 		cerr << "Opening hit output file: "; logTime(cerr, true);
 	}
-	OutFileBuf *fout;
-	if(!outfile.empty()) {
-		fout = new OutFileBuf(outfile.c_str(), false);
-	} else {
-		fout = new OutFileBuf();
-	}
 	// Initialize Ebwt object and read in header
 	if(gVerbose || startVerbose) {
 		cerr << "About to initialize fw Ebwt: "; logTime(cerr, true);
@@ -3714,11 +3708,12 @@ static void driver(
 		ebwt.evictFromMemory();
 	}
 	OutputQueue oq(
-		*fout,                   // out file buffer
+		outfile,                 // output filename
+		io_buffer_size,          // output buffer size
 		reorder && nthreads > 1, // whether to reorder when there's >1 thread
 		nthreads,                // # threads
 		nthreads > 1,            // whether to be thread-safe
-		readsPerBatchOutput,	 // # of reads to hold in out buffer
+		readsPerBatch,	         // # of reads to hold in out buffer
 		skipReads);              // first read will have this rdid
 	{
 		Timer _t(cerr, "Time searching: ", timing);
@@ -3860,7 +3855,7 @@ static void driver(
 					bool printHd = true, printSq = true;
 					BTString buf;
 					samc.printHeader(buf, rgid, rgs, printHd, !samNoSQ, printSq);
-					fout->writeString(buf);
+					oq.writeString(buf);
 				}
 				break;
 			}
@@ -3922,9 +3917,6 @@ static void driver(
 		delete mssink;
         delete ssdb;
 		delete metricsOfb;
-		if(fout != NULL) {
-			delete fout;
-		}
 	}
 }
 

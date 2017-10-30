@@ -18,6 +18,7 @@
  */
 
 #include "outq.h"
+#include <stdio.h>
 
 /**
  * Caller is telling us that they're about to write output record(s) for
@@ -78,7 +79,7 @@ void OutputQueue::finishReadImpl(const BTString& rec, TReadId rdid, size_t threa
 			{
 				ThreadSafe ts(mutex_m);
 				for(int i = 0; i < perThreadBufSize_; i++) {
-					obuf_.writeString(perThreadBuf_[threadId][i]);
+					writeString(perThreadBuf_[threadId][i]);
 				}
 			}
 			perThreadFlushed_[threadId] += perThreadBufSize_;
@@ -105,7 +106,7 @@ void OutputQueue::flushImpl(bool force) {
 	if(!reorder_) {
 		for(size_t i = 0; i < nthreads_; i++) {
 			for(int j = 0; j < perThreadCounter_[i]; j++) {
-				obuf_.writeString(perThreadBuf_[i][j]);
+				writeString(perThreadBuf_[i][j]);
 			}
 			perThreadFlushed_[i] += perThreadCounter_[i];
 			perThreadCounter_[i] = 0;
@@ -123,7 +124,7 @@ void OutputQueue::flushImpl(bool force) {
 		for(size_t i = 0; i < nflush; i++) {
 			assert(started_[i]);
 			assert(finished_[i]);
-			obuf_.writeString(lines_[i]);
+			writeString(lines_[i]);
 		}
 		lines_.erase(0, nflush);
 		started_.erase(0, nflush);
@@ -143,6 +144,20 @@ void OutputQueue::flush(bool force, bool getLock) {
 		flushImpl(force);
 	} else {
 		flushImpl(force);
+	}
+}
+
+/**
+ * Write a c++ string to the write buffer and, if necessary, flush.
+ */
+void OutputQueue::writeString(const BTString& s) {
+	size_t slen = s.length();
+	size_t nwritten = fwrite(s.toZBuf(), 1, slen, ofh_);
+	if(nwritten != slen) {
+		cerr << "Wrote only " << nwritten << " out of " << slen
+		     << " bytes to output " << std::endl;
+		perror("fwrite");
+		throw 1;
 	}
 }
 
