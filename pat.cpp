@@ -472,7 +472,7 @@ void CFilePatternSource::open() {
 			continue;
 		}
 		is_open_ = true;
-		setvbuf(fp_, buf_, _IOFBF, 64*1024);
+		setvbuf(fp_, buf_, _IOFBF, buffer_sz_);
 		return;
 	}
 	cerr << "Error: No input read files were valid" << endl;
