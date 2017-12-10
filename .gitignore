@@ -1,2 +1,16 @@
 reads_*.fq
 reads_*.sam
+*.dSYM
+hisat-align-l
+hisat-align-l-debug
+hisat-align-s
+hisat-align-s-debug
+hisat-build-l
+hisat-build-l-debug
+hisat-build-s
+hisat-build-s-debug
+hisat-inspect-l
+hisat-inspect-l-debug
+hisat-inspect-s
+hisat-inspect-s-debug
+.DS_Store
