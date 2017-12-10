@@ -151,7 +151,17 @@ void OutputQueue::flush(bool force, bool getLock) {
  * Write a c++ string to the write buffer and, if necessary, flush.
  */
 void OutputQueue::writeString(const BTString& s) {
-	size_t slen = s.length();
+	const size_t slen = s.length();
+#if 0
+	const char *zb = s.toZBuf();
+	for(size_t i = 0; i < slen; i++) {
+		assert_neq('\0', zb[i]);
+		if(putc_unlocked(zb[i], ofh_) == EOF) {
+			perror("putc_unlocked");
+			throw 1;
+		}
+	}
+#else
 	size_t nwritten = fwrite(s.toZBuf(), 1, slen, ofh_);
 	if(nwritten != slen) {
 		cerr << "Wrote only " << nwritten << " out of " << slen
@@ -159,6 +169,7 @@ void OutputQueue::writeString(const BTString& s) {
 		perror("fwrite");
 		throw 1;
 	}
+#endif
 }
 
 #ifdef OUTQ_MAIN
