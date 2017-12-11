@@ -3496,8 +3496,9 @@ static void multiseedSearch(
 	multiseed_metricsOfb      = metricsOfb;
 	multiseed_refs = refs;
 #ifdef WITH_TBB
-	//tbb::task_group tbb_grp;
 	AutoArray<std::thread*> threads(nthreads+1);
+	EList<thread_tracking_pair> tps;
+	tps.resize(nthreads); // TODO: consider thread stealing
 #else
 	AutoArray<tthread::thread*> threads(nthreads);
 	AutoArray<int> tids(nthreads);
@@ -3544,10 +3545,9 @@ static void multiseedSearch(
 		thread_rids_mindist = (nthreads == 1 || !useTempSpliceSite ? 0 : 1000 * nthreads);
 		for(int i = 0; i < nthreads; i++) {
 #ifdef WITH_TBB
-			thread_tracking_pair tp;
-			tp.tid = i;
-			tp.done = &all_threads_done;
-			threads[i] = new std::thread(multiseedSearchWorker_hisat, (void*) &tp);
+			tps[i].tid = i;
+			tps[i].done = &all_threads_done;
+			threads[i] = new std::thread(multiseedSearchWorker_hisat, (void*) &tps[i]);
 			threads[i]->detach();
 			SLEEP(10);
 		}
