@@ -3543,18 +3543,22 @@ static void multiseedSearch(
 		thread_rids.resize(nthreads);
 		thread_rids.fill(0);
 		thread_rids_mindist = (nthreads == 1 || !useTempSpliceSite ? 0 : 1000 * nthreads);
-		for(int i = 0; i < nthreads; i++) {
 #ifdef WITH_TBB
+		for(int i = 1; i < nthreads; i++) {
 			tps[i].tid = i;
 			tps[i].done = &all_threads_done;
 			threads[i] = new std::thread(multiseedSearchWorker_hisat, (void*) &tps[i]);
 			threads[i]->detach();
 			SLEEP(10);
 		}
+		tps[0].tid = 0;
+		tps[0].done = &all_threads_done;
+		multiseedSearchWorker_hisat((void*)&tps[0]);
 		while(all_threads_done < nthreads) {
 			SLEEP(10);
 		}
 #else
+		for(int i = 0; i < nthreads; i++) {
 			// Thread IDs start at 1
 			tids[i] = i;
 			threads[i] = new tthread::thread(multiseedSearchWorker_hisat, (void*)&tids[i]);
