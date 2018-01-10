@@ -118,6 +118,7 @@ static uint32_t mhits;    // don't report any hits if there are > mhits
 static int partitionSz;   // output a partitioning key in first field
 static bool useSpinlock;  // false -> don't use of spinlocks even if they're #defines
 static int readsPerBatch; // # reads to read from input file at once
+static int nOutputs;      // # output files
 static int blockBytes;    // bytes in a single input block
 static int readsPerBlock; // # reads in a single input block
 static bool fileParallel; // separate threads read separate input files in parallel
@@ -330,6 +331,7 @@ static void resetOptions() {
 	mhits					= 0;     // stop after finding this many alignments+1
 	partitionSz				= 0;     // output a partitioning key in first field
 	readsPerBatch			= 16;    // # reads to read from input file at once
+	nOutputs				= 1;     // # output files
 	blockBytes				= 65536; // bytes in a single input block
 	readsPerBlock			= 128;   // # reads in a single input block
 	useSpinlock				= true;  // false -> don't use of spinlocks even if they're #defines
@@ -532,6 +534,7 @@ static struct option long_options[] = {
 	{(char*)"upto",         required_argument, 0,            'u'},
 	{(char*)"version",      no_argument,       0,            ARG_VERSION},
 	{(char*)"reads-per-batch", required_argument, 0,         ARG_READS_PER_BATCH},
+	{(char*)"num-outputs",  required_argument, 0,            ARG_NUM_OUTPUTS},
 	{(char*)"block-bytes",     required_argument, 0,         ARG_BLOCK_BYTES},
 	{(char*)"reads-per-block", required_argument, 0,         ARG_READS_PER_BLOCK},
 	{(char*)"filepar",      no_argument,       0,            ARG_FILEPAR},
@@ -1322,6 +1325,9 @@ static void parseOption(int next_option, const char *arg) {
 		case ARG_PARTITION: partitionSz = parse<int>(arg); break;
 		case ARG_READS_PER_BATCH:
 			readsPerBatch = parseInt(1, "--reads-per-batch arg must be at least 1", arg);
+			break;
+		case ARG_NUM_OUTPUTS:
+			nOutputs = parseInt(1, "--num-outputs arg must be at least 1", arg);
 			break;
 		case ARG_BLOCK_BYTES:
 			blockBytes = parseInt(0, "--block-bytes arg must be non-negative", arg);
@@ -3719,6 +3725,9 @@ static void driver(
 		nthreads,                // # threads
 		nthreads > 1,            // whether to be thread-safe
 		readsPerBatch,	         // # of reads to hold in out buffer
+#if 1
+		nOutputs,                // # output files
+#endif
 		skipReads);              // first read will have this rdid
 	{
 		Timer _t(cerr, "Time searching: ", timing);

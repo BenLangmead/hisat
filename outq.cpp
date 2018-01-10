@@ -88,15 +88,8 @@ void OutputQueue::finishReadImpl(const BTString& rec, TReadId rdid, size_t threa
 				}
 			}
 #else
-			// We have two choices.  1. flushes get round robined to each of
-			// the 4 file handles.  2. threads are divided into 4 partitions
-			// and that thread always dumps to the same file.
-			
-			// Either way, SAM records are out of order and distributed across
-			// files.
-			
 			// The first case tries to minimize the fraction of the
-			int outidx = threadId % 4;
+			int outidx = threadId % nmulti_output_;
 			{
 				ThreadSafe ts(*mutexes_[outidx]);
 				for(int i = 0; i < perThreadBufSize_; i++) {

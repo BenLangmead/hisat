@@ -48,6 +48,9 @@ public:
 		size_t nthreads,
 		bool threadSafe,
 		int perThreadBufSize,
+#if 1
+		int nmulti_output,
+#endif
 		TReadId rdid = 0) :
 #if 0
 		ofh_(stdout),
@@ -67,6 +70,7 @@ public:
 #else
 		mutex_global_(),
 		mutexes_(),
+		nmulti_output_(nmulti_output),
 #endif
 		nthreads_(nthreads),
 		perThreadBuf_(NULL),
@@ -107,9 +111,16 @@ public:
 			}
 		}
 #else
-		for(int i = 0; i < 4; i++) {
+		assert_gt(nmulti_output, 0);
+		if(ofn.empty() || ofn == "/dev/null") {
+			nmulti_output = 1;
+		}
+		for(int i = 0; i < nmulti_output; i++) {
 			ostringstream oss;
-			oss << ofn << ".multi_" << i;
+			oss << ofn;
+			if(nmulti_output > 1) {
+				oss << ".multi_" << i;
+			}
 			FILE *ofh = fopen(oss.str().c_str(), "w");
 			if(ofh == NULL) {
 				std::cerr << "Error: Could not open alignment output file "
@@ -246,6 +257,7 @@ protected:
 #else
 	MUTEX_T         mutex_global_;  // for reorder bookkeeping
 	std::vector<MUTEX_T*> mutexes_;
+	int             nmulti_output_;
 #endif
 	
 	size_t nthreads_;
