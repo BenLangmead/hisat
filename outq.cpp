@@ -98,7 +98,7 @@ void OutputQueue::finishReadImpl(const BTString& rec, TReadId rdid, size_t threa
 			// The first case tries to minimize the fraction of the
 			int outidx = threadId % 4;
 			{
-				ThreadSafe ts(mutexes_[outidx]);
+				ThreadSafe ts(*mutexes_[outidx]);
 				for(int i = 0; i < perThreadBufSize_; i++) {
 					writeString(perThreadBuf_[threadId][i], outidx);
 				}

@@ -125,8 +125,8 @@ public:
 			}
 			obufs_.push_back(obuf);
 			ofhs_.push_back(ofh);
+			mutexes_.push_back(new MUTEX_T());
 		}
-		mutexes_.resize(4);
 #endif
 	}
 
@@ -155,6 +155,7 @@ public:
 		for(int i = 0; i < ofhs_.size(); i++) {
 			if(ofhs_[i] != NULL) {
 				delete[] obufs_[i];
+				delete mutexes_[i];
 				fclose(ofhs_[i]);
 				ofhs_[i] = NULL;
 			}
@@ -244,7 +245,7 @@ protected:
 	MUTEX_T         mutex_m;
 #else
 	MUTEX_T         mutex_global_;  // for reorder bookkeeping
-	std::vector<MUTEX_T> mutexes_;
+	std::vector<MUTEX_T*> mutexes_;
 #endif
 	
 	size_t nthreads_;
