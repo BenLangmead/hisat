@@ -152,7 +152,7 @@ void OutputQueue::flush(bool force, bool getLock) {
  */
 void OutputQueue::writeString(const BTString& s) {
 	const size_t slen = s.length();
-#if 0
+#if 1
 	const char *zb = s.toZBuf();
 	for(size_t i = 0; i < slen; i++) {
 		assert_neq('\0', zb[i]);
