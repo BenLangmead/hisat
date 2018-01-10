@@ -109,11 +109,11 @@ public:
 #else
 		for(int i = 0; i < 4; i++) {
 			ostringstream oss;
-			oss << "multi_" << i;
+			oss << ofn << ".multi_" << i;
 			FILE *ofh = fopen(oss.str().c_str(), "w");
 			if(ofh == NULL) {
 				std::cerr << "Error: Could not open alignment output file "
-				<< oss.str() << std::endl;
+				          << oss.str() << std::endl;
 				throw 1;
 			}
 			char *obuf = new char[output_buffer_size];
@@ -152,7 +152,7 @@ public:
 			ofh_ = NULL;
 		}
 #else
-		for(int i = 0; i < ofhs_.size(); i++) {
+		for(int i = 0; i < (int)ofhs_.size(); i++) {
 			if(ofhs_[i] != NULL) {
 				delete[] obufs_[i];
 				delete mutexes_[i];
