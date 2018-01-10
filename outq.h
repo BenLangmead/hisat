@@ -26,6 +26,7 @@
 #include "read.h"
 #include "threading.h"
 #include "mem_ids.h"
+#include <vector>
 
 /**
  * Encapsulates a list of lines of output.  If the earliest as-yet-unreported
@@ -48,15 +49,25 @@ public:
 		bool threadSafe,
 		int perThreadBufSize,
 		TReadId rdid = 0) :
+#if 0
 		ofh_(stdout),
 		obuf_(NULL),
+#else
+		ofhs_(),
+		obufs_(),
+#endif
 		cur_(rdid),
 		lines_(RES_CAT),
 		started_(RES_CAT),
 		finished_(RES_CAT),
 		reorder_(reorder),
 		threadSafe_(threadSafe),
+#if 0
 		mutex_m(),
+#else
+		mutex_global_(),
+		mutexes_(),
+#endif
 		nthreads_(nthreads),
 		perThreadBuf_(NULL),
 		perThreadCounter_(NULL),
@@ -79,6 +90,7 @@ public:
 			perThreadFinished_[i] = 0;
 			perThreadFlushed_[i] = 0;
 		}
+#if 0
 		if(!ofn.empty()) {
 			ofh_ = fopen(ofn.c_str(), "w");
 			if(ofh_ == NULL) {
@@ -94,6 +106,28 @@ public:
 				          << "Return value = " << ret << std::endl;
 			}
 		}
+#else
+		for(int i = 0; i < 4; i++) {
+			ostringstream oss;
+			oss << "multi_" << i;
+			FILE *ofh = fopen(oss.str().c_str(), "w");
+			if(ofh == NULL) {
+				std::cerr << "Error: Could not open alignment output file "
+				<< oss.str() << std::endl;
+				throw 1;
+			}
+			char *obuf = new char[output_buffer_size];
+			int ret = setvbuf(ofh, obuf, _IOFBF, output_buffer_size);
+			if(ret != 0) {
+				std::cerr << "Warning: Could not allocate the proper "
+				          << "buffer size for output file stream. "
+				          << "Return value = " << ret << std::endl;
+			}
+			obufs_.push_back(obuf);
+			ofhs_.push_back(ofh);
+		}
+		mutexes_.resize(4);
+#endif
 	}
 
 	~OutputQueue() {
@@ -108,6 +142,7 @@ public:
 			delete[] perThreadCounter_;
 			perThreadCounter_ = NULL;
 		}
+#if 0
 		if(obuf_ != NULL) {
 			delete[] obuf_;
 			obuf_ = NULL;
@@ -116,6 +151,15 @@ public:
 			fclose(ofh_);
 			ofh_ = NULL;
 		}
+#else
+		for(int i = 0; i < ofhs_.size(); i++) {
+			if(ofhs_[i] != NULL) {
+				delete[] obufs_[i];
+				fclose(ofhs_[i]);
+				ofhs_[i] = NULL;
+			}
+		}
+#endif
 	}
 
 	/**
@@ -172,7 +216,7 @@ public:
 	/**
 	 * Write a c++ string to the write buffer and, if necessary, flush.
 	 */
-	void writeString(const BTString& s);
+	void writeString(const BTString& s, int outidx);
 	
 	/**
 	 * Write already-committed lines starting from cur_.
@@ -181,15 +225,27 @@ public:
 
 protected:
 
+#if 0
 	FILE            *ofh_;
 	char            *obuf_;
+#else
+	std::vector<FILE *> ofhs_;
+	std::vector<char *> obufs_;
+#endif
+	
 	TReadId         cur_;
 	EList<BTString> lines_;
 	EList<bool>     started_;
 	EList<bool>     finished_;
 	bool            reorder_;
 	bool            threadSafe_;
+	
+#if 0
 	MUTEX_T         mutex_m;
+#else
+	MUTEX_T         mutex_global_;  // for reorder bookkeeping
+	std::vector<MUTEX_T> mutexes_;
+#endif
 	
 	size_t nthreads_;
 	BTString** perThreadBuf_;

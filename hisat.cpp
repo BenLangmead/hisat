@@ -3860,7 +3860,7 @@ static void driver(
 					bool printHd = true, printSq = true;
 					BTString buf;
 					samc.printHeader(buf, rgid, rgs, printHd, !samNoSQ, printSq);
-					oq.writeString(buf);
+					oq.writeString(buf, 0);
 				}
 				break;
 			}

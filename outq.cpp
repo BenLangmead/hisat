@@ -49,7 +49,11 @@ void OutputQueue::beginReadImpl(TReadId rdid, size_t threadId) {
 
 void OutputQueue::beginRead(TReadId rdid, size_t threadId) {
 	if(reorder_ && threadSafe_) {
+#if 0
 		ThreadSafe ts(mutex_m);
+#else
+		ThreadSafe ts(mutex_global_);
+#endif
 		beginReadImpl(rdid, threadId);
 	} else {
 		beginReadImpl(rdid, threadId);
@@ -76,12 +80,30 @@ void OutputQueue::finishReadImpl(const BTString& rec, TReadId rdid, size_t threa
 		perThreadFinished_[threadId]++;
 		if(perThreadCounter_[threadId] >= perThreadBufSize_) {
 			assert_eq(perThreadCounter_[threadId], perThreadBufSize_);
+#if 0
 			{
 				ThreadSafe ts(mutex_m);
 				for(int i = 0; i < perThreadBufSize_; i++) {
 					writeString(perThreadBuf_[threadId][i]);
 				}
 			}
+#else
+			// We have two choices.  1. flushes get round robined to each of
+			// the 4 file handles.  2. threads are divided into 4 partitions
+			// and that thread always dumps to the same file.
+			
+			// Either way, SAM records are out of order and distributed across
+			// files.
+			
+			// The first case tries to minimize the fraction of the
+			int outidx = threadId % 4;
+			{
+				ThreadSafe ts(mutexes_[outidx]);
+				for(int i = 0; i < perThreadBufSize_; i++) {
+					writeString(perThreadBuf_[threadId][i], outidx);
+				}
+			}
+#endif
 			perThreadFlushed_[threadId] += perThreadBufSize_;
 			perThreadCounter_[threadId] = 0;
 		}
@@ -92,7 +114,11 @@ void OutputQueue::finishReadImpl(const BTString& rec, TReadId rdid, size_t threa
 void OutputQueue::finishRead(const BTString& rec, TReadId rdid, size_t threadId) {
 	assert_lt(threadId, nthreads_);
 	if(threadSafe_ && reorder_) {
+#if 0
 		ThreadSafe ts(mutex_m);
+#else
+		ThreadSafe ts(mutex_global_);
+#endif
 		finishReadImpl(rec, rdid, threadId);
 	} else {
 		finishReadImpl(rec, rdid, threadId);
@@ -106,7 +132,11 @@ void OutputQueue::flushImpl(bool force) {
 	if(!reorder_) {
 		for(size_t i = 0; i < nthreads_; i++) {
 			for(int j = 0; j < perThreadCounter_[i]; j++) {
+#if 0
 				writeString(perThreadBuf_[i][j]);
+#else
+				writeString(perThreadBuf_[i][j], 0);
+#endif
 			}
 			perThreadFlushed_[i] += perThreadCounter_[i];
 			perThreadCounter_[i] = 0;
@@ -124,7 +154,11 @@ void OutputQueue::flushImpl(bool force) {
 		for(size_t i = 0; i < nflush; i++) {
 			assert(started_[i]);
 			assert(finished_[i]);
+#if 0
 			writeString(lines_[i]);
+#else
+			writeString(lines_[i], 0);
+#endif
 		}
 		lines_.erase(0, nflush);
 		started_.erase(0, nflush);
@@ -140,7 +174,11 @@ void OutputQueue::flushImpl(bool force) {
  */
 void OutputQueue::flush(bool force, bool getLock) {
 	if(getLock && threadSafe_) {
+#if 0
 		ThreadSafe ts(mutex_m);
+#else
+		ThreadSafe ts(mutex_global_);
+#endif
 		flushImpl(force);
 	} else {
 		flushImpl(force);
@@ -150,27 +188,29 @@ void OutputQueue::flush(bool force, bool getLock) {
 /**
  * Write a c++ string to the write buffer and, if necessary, flush.
  */
+#if 0
 void OutputQueue::writeString(const BTString& s) {
 	const size_t slen = s.length();
-#if 0
-	const char *zb = s.toZBuf();
-	for(size_t i = 0; i < slen; i++) {
-		assert_neq('\0', zb[i]);
-		if(putc_unlocked(zb[i], ofh_) == EOF) {
-			perror("putc_unlocked");
-			throw 1;
-		}
-	}
-#else
 	size_t nwritten = fwrite(s.toZBuf(), 1, slen, ofh_);
+	if(nwritten != slen) {
+		cerr << "Wrote only " << nwritten << " out of " << slen
+		<< " bytes to output " << std::endl;
+		perror("fwrite");
+		throw 1;
+	}
+}
+#else
+void OutputQueue::writeString(const BTString& s, int outidx) {
+	const size_t slen = s.length();
+	size_t nwritten = fwrite(s.toZBuf(), 1, slen, ofhs_[outidx]);
 	if(nwritten != slen) {
 		cerr << "Wrote only " << nwritten << " out of " << slen
 		     << " bytes to output " << std::endl;
 		perror("fwrite");
 		throw 1;
 	}
-#endif
 }
+#endif
 
 #ifdef OUTQ_MAIN
 
