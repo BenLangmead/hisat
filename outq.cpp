@@ -18,6 +18,7 @@
  */
 
 #include "outq.h"
+#include "timer.h"
 #include <stdio.h>
 
 /**
@@ -77,6 +78,7 @@ void OutputQueue::finishReadImpl(const BTString& rec, TReadId rdid, size_t threa
 		if(perThreadCounter_[threadId] >= perThreadBufSize_) {
 			assert_eq(perThreadCounter_[threadId], perThreadBufSize_);
 			{
+				Timer timer(std::cout, "XYZ: ");
 				ThreadSafe ts(mutex_m);
 				for(int i = 0; i < perThreadBufSize_; i++) {
 					writeString(perThreadBuf_[threadId][i]);
