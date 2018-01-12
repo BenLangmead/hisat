@@ -111,14 +111,14 @@ public:
 			}
 		}
 #else
-		assert_gt(nmulti_output, 0);
+		assert_gt(nmulti_output_, 0);
 		if(ofn.empty() || ofn == "/dev/null") {
-			nmulti_output = 1;
+			nmulti_output_ = 1;
 		}
-		for(int i = 0; i < nmulti_output; i++) {
+		for(int i = 0; i < nmulti_output_; i++) {
 			ostringstream oss;
 			oss << ofn;
-			if(nmulti_output > 1) {
+			if(nmulti_output_ > 1) {
 				oss << ".multi_" << i;
 			}
 			FILE *ofh = fopen(oss.str().c_str(), "w");
