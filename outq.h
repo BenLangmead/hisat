@@ -28,6 +28,18 @@
 #include "mem_ids.h"
 #include <vector>
 
+static std::string compose_multisam_name(const std::string& fn, int idx) {
+	assert_geq(idx, 0);
+	const size_t len = fn.length();
+	std::ostringstream os;
+	if(fn.substr(len-4, 4) == ".sam") {
+		os << fn.substr(0, len-3) << "part" << (idx+1) << ".sam";
+		return os.str();
+	}
+	os << fn << ".part" << (idx+1);
+	return os.str();
+}
+
 /**
  * Encapsulates a list of lines of output.  If the earliest as-yet-unreported
  * read has id N and Bowtie 2 wants to write a record for read with id N+1, we
@@ -48,30 +60,19 @@ public:
 		size_t nthreads,
 		bool threadSafe,
 		int perThreadBufSize,
-#if 1
 		int nmulti_output,
-#endif
 		TReadId rdid = 0) :
-#if 0
-		ofh_(stdout),
-		obuf_(NULL),
-#else
 		ofhs_(),
 		obufs_(),
-#endif
 		cur_(rdid),
 		lines_(RES_CAT),
 		started_(RES_CAT),
 		finished_(RES_CAT),
 		reorder_(reorder),
 		threadSafe_(threadSafe),
-#if 0
-		mutex_m(),
-#else
 		mutex_global_(),
 		mutexes_(),
 		nmulti_output_(nmulti_output),
-#endif
 		nthreads_(nthreads),
 		perThreadBuf_(NULL),
 		perThreadCounter_(NULL),
@@ -94,37 +95,19 @@ public:
 			perThreadFinished_[i] = 0;
 			perThreadFlushed_[i] = 0;
 		}
-#if 0
-		if(!ofn.empty()) {
-			ofh_ = fopen(ofn.c_str(), "w");
-			if(ofh_ == NULL) {
-				std::cerr << "Error: Could not open alignment output file "
-				          << ofn << std::endl;
-				throw 1;
-			}
-			obuf_ = new char[output_buffer_size];
-			int ret = setvbuf(ofh_, obuf_, _IOFBF, output_buffer_size);
-			if(ret != 0) {
-				std::cerr << "Warning: Could not allocate the proper "
-				          << "buffer size for output file stream. "
-				          << "Return value = " << ret << std::endl;
-			}
-		}
-#else
 		assert_gt(nmulti_output_, 0);
 		if(ofn.empty() || ofn == "/dev/null") {
 			nmulti_output_ = 1;
 		}
+		std::string ofn_l = ofn;
 		for(int i = 0; i < nmulti_output_; i++) {
-			ostringstream oss;
-			oss << ofn;
 			if(nmulti_output_ > 1) {
-				oss << ".multi_" << i;
+				ofn_l = compose_multisam_name(ofn, i);
 			}
-			FILE *ofh = fopen(oss.str().c_str(), "w");
+			FILE *ofh = fopen(ofn_l.c_str(), "w");
 			if(ofh == NULL) {
 				std::cerr << "Error: Could not open alignment output file "
-				          << oss.str() << std::endl;
+				          << ofn_l << std::endl;
 				throw 1;
 			}
 			char *obuf = new char[output_buffer_size];
@@ -138,7 +121,6 @@ public:
 			ofhs_.push_back(ofh);
 			mutexes_.push_back(new MUTEX_T());
 		}
-#endif
 	}
 
 	~OutputQueue() {
@@ -153,16 +135,6 @@ public:
 			delete[] perThreadCounter_;
 			perThreadCounter_ = NULL;
 		}
-#if 0
-		if(obuf_ != NULL) {
-			delete[] obuf_;
-			obuf_ = NULL;
-		}
-		if(ofh_ != NULL) {
-			fclose(ofh_);
-			ofh_ = NULL;
-		}
-#else
 		for(int i = 0; i < (int)ofhs_.size(); i++) {
 			if(ofhs_[i] != NULL) {
 				delete[] obufs_[i];
@@ -171,7 +143,6 @@ public:
 				ofhs_[i] = NULL;
 			}
 		}
-#endif
 	}
 
 	/**
@@ -237,13 +208,8 @@ public:
 
 protected:
 
-#if 0
-	FILE            *ofh_;
-	char            *obuf_;
-#else
 	std::vector<FILE *> ofhs_;
 	std::vector<char *> obufs_;
-#endif
 	
 	TReadId         cur_;
 	EList<BTString> lines_;
@@ -252,13 +218,9 @@ protected:
 	bool            reorder_;
 	bool            threadSafe_;
 	
-#if 0
-	MUTEX_T         mutex_m;
-#else
 	MUTEX_T         mutex_global_;  // for reorder bookkeeping
 	std::vector<MUTEX_T*> mutexes_;
 	int             nmulti_output_;
-#endif
 	
 	size_t nthreads_;
 	BTString** perThreadBuf_;
