@@ -1234,6 +1234,7 @@ bool SpliceSiteDB::getSpliceSite(SpliceSite& ss) const
     {
         getSpliceSiteImpl(ss, ref);
     }
+	return true;
 }
 
 void SpliceSiteDB::getLeftSpliceSites(uint32_t ref, uint32_t left, uint32_t range, EList<SpliceSite>& spliceSites) const
